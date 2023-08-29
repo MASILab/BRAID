@@ -1,1 +1,2 @@
-# **BR**ain **A**ge **I**dentification from **D**iffusion MRI (**BRAID**)
+# BRAID
+**BR**ain **A**ge **I**dentification from **D**iffusion MRI (**BRAID**)
