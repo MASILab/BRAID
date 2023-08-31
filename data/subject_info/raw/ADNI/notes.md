@@ -7,7 +7,7 @@ Diagnosis (derived), age at visit, sex, race:
 More demographic information (but no dictionary):
 - `Subject Demographics [ADNI1,GO,2,3]`: BRAID/data/subject_info/raw/ADNI/Subject_Characteristics/Subject_Demographics/PTDEMOG_30Aug2023.csv
 
-Spreadsheet useful for mapping:
+Spreadsheet useful for mapping (and turns out to contain all information we will need):
 - BRAID/data/subject_info/raw/ADNI/ADNI_MRI_T1.csv
 
 Subscores of the test (might be interesting to analyze):
