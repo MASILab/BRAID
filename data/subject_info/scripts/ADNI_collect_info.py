@@ -9,11 +9,11 @@ from pathlib import Path
 
 path_dataset_bids = Path('/nfs2/harmonization/BIDS/ADNI_DTI')  # TODO: the folder will be renamed to ADNI
 
-df_mri_t1 = pd.read_csv('./BRAID/data/subject_info/raw/ADNI/ADNI_MRI_T1.csv')  # already contain most of the information we need
-df_cognitive = pd.read_csv('./BRAID/data/subject_info/raw/ADNI/Assessments/Neuropsychological/ADSP_PHC_COGN_10_05_22_30Aug2023.csv')  # specific for cognitive info
+df_mri_t1 = pd.read_csv('./data/subject_info/raw/ADNI/ADNI_MRI_T1.csv')  # already contain most of the information we need
+df_cognitive = pd.read_csv('./data/subject_info/raw/ADNI/Assessments/Neuropsychological/ADSP_PHC_COGN_10_05_22_30Aug2023.csv')  # specific for cognitive info
 
 # convert values of columns for easier referencing
-with open('./BRAID/data/subject_info/scripts/ADNI_visit_LUT.json', 'r') as f:
+with open('./data/subject_info/scripts/ADNI_visit_LUT.json', 'r') as f:
     dict_adni_visit_lut = json.load(f)
 df_mri_t1['subject_id'] = df_mri_t1['Subject ID'].str.split('_S_').str[-1]
 df_mri_t1['visit_bids'] = df_mri_t1['Visit'].map(dict_adni_visit_lut)
@@ -132,4 +132,4 @@ d = {'subject': list_df_subject,
      'diagnosis': list_df_diagnosis}
 df = pd.DataFrame(data=d)
 
-df.to_csv('./BRAID/data/subject_info/clean/ADNI_info.csv', index=False)
+df.to_csv('./data/subject_info/clean/ADNI_info.csv', index=False)
