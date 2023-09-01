@@ -11,6 +11,7 @@ path_dataset_bids = Path('/nfs2/harmonization/BIDS/ADNI_DTI')  # TODO: the folde
 
 df_mri_t1 = pd.read_csv('./data/subject_info/raw/ADNI/ADNI_MRI_T1.csv')  # already contain most of the information we need
 df_cognitive = pd.read_csv('./data/subject_info/raw/ADNI/Assessments/Neuropsychological/ADSP_PHC_COGN_10_05_22_30Aug2023.csv')  # specific for cognitive info
+df_w_race = pd.read_csv('./data/subject_info/raw/ADNI/Subject_Characteristics/Subject_Demographics/PTDEMOG_30Aug2023.csv')
 
 # convert values of columns for easier referencing
 with open('./data/subject_info/scripts/ADNI_visit_LUT.json', 'r') as f:
@@ -33,6 +34,15 @@ dict_sex = {
     1: 'male',
     2: 'female'
 }
+dict_race2standard = {   
+    1: 'American Indian or Alaska Native',
+    2: 'Asian',
+    3: 'Native Hawaiian or Other Pacific Islander',
+    4: 'Black or African American',
+    5: 'White',
+    6: 'More than one race',
+    7: None
+}
 
 # record
 list_df_subject = []
@@ -40,6 +50,7 @@ list_df_session = []
 list_df_sex = []
 list_df_age = []
 list_df_diagnosis = []
+list_df_race = []
 
 # Loop through sessions we have and collect information
 for subject in path_dataset_bids.iterdir():
@@ -84,6 +95,12 @@ for subject in path_dataset_bids.iterdir():
         except:
             study_date = None
         
+        try:
+            race = df_w_race.loc[(df_w_race['RID']==int(subject_id))&(df_w_race['PTRACCAT']>0), 'PTRACCAT'].values[0]
+            race = dict_race2standard[race]
+        except:
+            race = None
+            
         # if study_date is available, use it to get missing info
         if study_date != None:
             study_date = pd.to_datetime(study_date, format='%Y-%m-%d')
@@ -124,12 +141,14 @@ for subject in path_dataset_bids.iterdir():
         list_df_sex.append(sex)
         list_df_age.append(age)
         list_df_diagnosis.append(diagnosis)
+        list_df_race.append(race)
         
 d = {'subject': list_df_subject,
      'session': list_df_session,
      'sex': list_df_sex,
      'age': list_df_age,
-     'diagnosis': list_df_diagnosis}
+     'diagnosis': list_df_diagnosis,
+     'race': list_df_race}
 df = pd.DataFrame(data=d)
 
 df.to_csv('./data/subject_info/clean/ADNI_info.csv', index=False)
