@@ -1,0 +1,1 @@
+`./data/subject_info/raw/VMAP/Multisite_dMRI_Harmonized_all_tracts_10-10-22.csv` contains demog/diagnosis info about VMAP. We will receive data from new subjects of VMAP from Derek in September 2023.
