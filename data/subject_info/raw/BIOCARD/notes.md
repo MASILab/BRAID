@@ -20,4 +20,5 @@ Diagnosis (Months since baseline visit, birthyear, diagnosis at visit)
 
 
 ### Could be interesting to investigate
-Some subjects were normal, then classified as MCI, but then back to normal.
+- 2 subjects were impaired (not MCI) and turned to normal
+- 1 subject experienced all phases, including normal, MCI, impaired (not MCI), and dementia
