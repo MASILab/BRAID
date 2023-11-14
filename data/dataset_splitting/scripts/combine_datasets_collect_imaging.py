@@ -136,6 +136,7 @@ for csv in clean_csv_root.iterdir():
         
         # dataset-specific information
         if dataset_name == 'OASIS3':
+            continue
             session = row['session']
             age = row['age']
             dx = row['diagnosis']
@@ -172,7 +173,69 @@ for csv in clean_csv_root.iterdir():
             for i, t1w in enumerate(list_t1w):
                 scan = i+1
                 save_to_lists(dataset_name, subject, session, scan, sex, race_simple, race, age, dx_simple, dx, dx_detail, control_label, t1w, modality='T1w')
-
+        
+        elif dataset_name == 'WRAP':
+            continue
+            session = row['session']
+            age = row['age']
+            dx = row['diagnosis']
+            if dx in dict_dx2standard.keys():
+                dx_simple = dict_dx2standard[dx]
+            else:
+                dx_simple = None
+            dx_detail = None
+            
+            if dx_simple == 'normal':
+                control_label = 1
+            else:
+                control_label = 0
+            
+            # DTI
+            derivatives_folder = dataset_path / 'derivatives' / subject / session
+            if derivatives_folder.is_dir():
+                list_wmatlas = [fd for fd in derivatives_folder.iterdir() if ('WMAtlas' in fd.name) and ('EVE3' not in fd.name)]
+            else:
+                list_wmatlas = []
+            list_wmatlas = sorted(list_wmatlas)
+            for i, dti_registration_folder in enumerate(list_wmatlas):
+                # check if it is empty
+                fa = dti_registration_folder / 'dwmri%fa.nii.gz'
+                md = dti_registration_folder / 'dwmri%md.nii.gz'
+                if fa.is_file() and md.is_file():
+                    scan = i+1
+                    save_to_lists(dataset_name, subject, session, scan, sex, race_simple, race, age, dx_simple, dx, dx_detail, control_label, dti_registration_folder, modality='DTI')
+            
+            # T1w
+            anat_folder = dataset_path / subject / session / 'anat'
+            if anat_folder.is_dir():
+                list_t1w = [fn for fn in anat_folder.iterdir() if '_T1w.nii' in fn.name]
+            else:
+                list_t1w = []
+            
+            for i, t1w in enumerate(list_t1w):
+                scan = i+1
+                save_to_lists(dataset_name, subject, session, scan, sex, race_simple, race, age, dx_simple, dx, dx_detail, control_label, t1w, modality='T1w')
+            
+        elif dataset_name == 'BIOCARD':
+            continue
+        elif dataset_name == 'OASIS4':
+            continue
+        elif dataset_name == 'BLSA':
+            continue
+        elif dataset_name == 'NACC':
+            continue
+        elif dataset_name == 'ROSMAPMARS':
+            continue
+        elif dataset_name == 'UKBB':
+            continue
+        elif dataset_name == 'VMAP':
+            continue
+        elif dataset_name == 'ADNI':
+            continue
+        elif dataset_name == 'ICBM':
+            continue
+        else:
+            print(dataset_name, ' is not supported yet.')
 
 # Convert to dataframe
 df_dti = pd.DataFrame({
