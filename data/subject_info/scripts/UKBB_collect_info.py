@@ -1,4 +1,5 @@
-# Collect information of interest.
+# Collect information of interest. 
+# This script requires GDPR access and sshfs set up correctly to run as designed.
 # 
 # Author: Chenyu Gao
 # Date: Nov 9, 2023
@@ -8,7 +9,7 @@ import pandas as pd
 from pathlib import Path
 
 path_dataset_bids = Path('/nfs/masi/gaoc11/GDPR/BIDS/UKBB')
-demog = pd.read_csv('./data/subject_info/raw/UKBB/ukbb_raw.csv')
+demog = pd.read_csv('/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/subject_info/raw/ukbb_raw.csv')  # Note that it is not a local disk location
 
 # https://biobank.ctsu.ox.ac.uk/crystal/coding.cgi?id=9
 dict_sex2standard = {
@@ -124,4 +125,4 @@ d = {'subject': list_df_subject,
 df = pd.DataFrame(data=d)
 df.sort_values(by=['subject'], inplace=True)
 
-df.to_csv('./data/subject_info/clean/UKBB_info.csv', index=False)
+df.to_csv('/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/subject_info/clean/UKBB_info.csv', index=False)  # make sure that the output is on GDPR

@@ -111,11 +111,12 @@ dict_bids_location = {
 
 # Folder of the cleaned csv
 clean_csv_root = Path('./data/subject_info/clean')
+list_clean_csv = [fd for fd in clean_csv_root.iterdir() if fd.suffix == '.csv']
+list_clean_csv.append(Path('/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/subject_info/clean/UKBB_info.csv'))  # UKBB is stored on GDPR
 
 # Load csv for each dataset
-for csv in clean_csv_root.iterdir():
-    if csv.suffix != '.csv':
-        continue
+for csv in list_clean_csv:
+
     demog = pd.read_csv(csv)
     
     dataset_name = csv.name.split('_')[0]
@@ -245,6 +246,6 @@ df_t1w = pd.DataFrame({
     't1w_nifti': list_df_t1w_path,
 })
 
-# Save to csv
-df_dti.to_csv('./data/dataset_splitting/spreadsheet/databank_dti.csv', index=False)
-df_t1w.to_csv('./data/dataset_splitting/spreadsheet/databank_t1w.csv', index=False)
+# Save to csv. The outputs must be on GDPR since it contains UKBB rows.
+df_dti.to_csv('/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti.csv', index=False)
+df_t1w.to_csv('/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_t1w.csv', index=False)

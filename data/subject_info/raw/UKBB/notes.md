@@ -1,3 +1,6 @@
+++++++++ updated on Nov 15, 2023
+Made sure that all UKBB-derived data is saved on GDPR. Storing any UKBB data on other locations than GDPR is prohibited.
+
 ++++++++ updated on Nov 9, 2023
 
 Demographic information is converted by using https://github.com/USC-IGC/ukbb_parser
