@@ -16,7 +16,7 @@ path_databank_root = Path('/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/databank_dti
 # Load the csv of imaging paths of all datasets
 df = pd.read_csv('/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti.csv')
 df = df.loc[df['age'].notnull(), ]
-print(df)
+
 for _, row in tqdm(df.iterrows(), total=df.shape[0]):
     
     dataset = row['dataset']
@@ -59,20 +59,20 @@ for _, row in tqdm(df.iterrows(), total=df.shape[0]):
         t_path_transform_b0_to_t1 = t_path_transform_folder / 'transform_b0tot1.txt'
         t_path_transform_t1_to_MNI_affine = t_path_transform_folder / 'transform_t1toMNI_affine.mat'
 
-        subprocess.run(['rsync', '-a', str(path_fa_img), str(t_path_fa_img)])
-        subprocess.run(['rsync', '-a', str(path_md_img), str(t_path_md_img)])
-        subprocess.run(['rsync', '-a', str(path_b0_mask_img), str(t_path_b0_mask_img)])
-        subprocess.run(['rsync', '-a', str(path_transform_b0_to_t1), str(t_path_transform_b0_to_t1)])
-        subprocess.run(['rsync', '-a', str(path_transform_t1_to_MNI_affine), str(t_path_transform_t1_to_MNI_affine)])
+        subprocess.run(['rsync', '-L', str(path_fa_img), str(t_path_fa_img)])
+        subprocess.run(['rsync', '-L', str(path_md_img), str(t_path_md_img)])
+        subprocess.run(['rsync', '-L', str(path_b0_mask_img), str(t_path_b0_mask_img)])
+        subprocess.run(['rsync', '-L', str(path_transform_b0_to_t1), str(t_path_transform_b0_to_t1)])
+        subprocess.run(['rsync', '-L', str(path_transform_t1_to_MNI_affine), str(t_path_transform_t1_to_MNI_affine)])
     
 
     # If WMAtlas does not exist but it's HCPA, then we can preprocess it
     elif dataset == 'HCPA':
 
         # prequal
-        path_prequal_bval = Path(row['prequal_folder']) / 'dwmri.bval'
-        path_prequal_bvec = Path(row['prequal_folder']) / 'dwmri.bvec'
-        path_prequal_dmri = Path(row['prequal_folder']) / 'dwmri.nii.gz'
+        path_prequal_bval = Path(row['prequal_folder']) / 'PREPROCESSED' / 'dwmri.bval'
+        path_prequal_bvec = Path(row['prequal_folder']) / 'PREPROCESSED' / 'dwmri.bvec'
+        path_prequal_dmri = Path(row['prequal_folder']) / 'PREPROCESSED' / 'dwmri.nii.gz'
         # t1w
         path_anat_folder = Path(row['prequal_folder'].replace('derivatives/', '').replace(row['prequal_folder'].split('/')[-1], 'anat'))
         list_t1w = [fn for fn in path_anat_folder.iterdir() if '_T1w.nii' in fn.name]
@@ -98,10 +98,10 @@ for _, row in tqdm(df.iterrows(), total=df.shape[0]):
         t_path_prequal_dmri = t_path_prequal_folder / 'dwmri.nii.gz'
         t_path_t1w_img = t_path_t1w_folder / 't1w.nii.gz'
 
-        subprocess.run(['rsync', '-a', str(path_prequal_bval), str(t_path_prequal_bval)])
-        subprocess.run(['rsync', '-a', str(path_prequal_bvec), str(t_path_prequal_bvec)])
-        subprocess.run(['rsync', '-a', str(path_prequal_dmri), str(t_path_prequal_dmri)])
-        subprocess.run(['rsync', '-a', str(path_t1w_img), str(t_path_t1w_img)])
+        subprocess.run(['rsync', '-L', str(path_prequal_bval), str(t_path_prequal_bval)])
+        subprocess.run(['rsync', '-L', str(path_prequal_bvec), str(t_path_prequal_bvec)])
+        subprocess.run(['rsync', '-L', str(path_prequal_dmri), str(t_path_prequal_dmri)])
+        subprocess.run(['rsync', '-L', str(path_t1w_img), str(t_path_t1w_img)])
 
 
     else:
