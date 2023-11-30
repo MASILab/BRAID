@@ -71,15 +71,3 @@ def apply_transform_to_img_in_b0(path_img_b0, path_img_ref, path_img_out, path_t
                '-t', str(path_transform_t1_to_MNI152), '-t', str(path_transform_b0_to_t1)]
     subprocess.run(command)
 
-# path_b0 = '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/databank_dti/HCPA/sub-HCA6295782/ses-1/scan-1/firstshell/dwmri_firstshell_b0.nii.gz'
-# path_t1 = '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/databank_dti/HCPA/sub-HCA6295782/ses-1/scan-1/t1w/t1w.nii.gz'
-# path_t1_brain = '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/databank_dti/HCPA/sub-HCA6295782/ses-1/scan-1/t1w_brain_mask/t1w_brain.nii.gz'
-# path_MNI152 = '/nfs2/ForChenyu/MNI_152.nii.gz'
-# outdir = '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/databank_dti/HCPA/sub-HCA6295782/ses-1/scan-1/transform'
-
-# register_b0_to_MNI152(path_b0, path_t1, path_t1_brain, path_MNI152, outdir)
-
-# path_final_test = '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/databank_dti/HCPA/sub-HCA6295782/ses-1/scan-1/final/b0_MNI152.nii.gz'
-# path_transform_b0_to_t1 = '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/databank_dti/HCPA/sub-HCA6295782/ses-1/scan-1/transform/transform_b0tot1.txt'
-# path_transform_t1_to_MNI152 = '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/databank_dti/HCPA/sub-HCA6295782/ses-1/scan-1/transform/transform_t1toMNI_affine.mat'
-# apply_transform_to_img_in_b0(path_b0, path_MNI152, path_final_test, path_transform_b0_to_t1, path_transform_t1_to_MNI152)
