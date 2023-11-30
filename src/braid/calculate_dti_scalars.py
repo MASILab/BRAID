@@ -1,4 +1,3 @@
-#
 # Author: Michael Kim, Chenyu Gao
 # Date: Nov 20, 2023
 
@@ -102,6 +101,43 @@ def extract_b0_volume(path_dwi, path_bval, path_bvec, path_b0):
     
     process2 = subprocess.run(command2, input=output1, check=True)
 
-def calculate_fa_md_maps(path_dwi, path_bval, path_bvec, path_b0, path_t1_brain_mask, path_transform_t1tob0, path_fa, path_md):
+def calculate_fa_md_maps(path_dwi, path_bval, path_bvec, path_b0, path_t1_brain_mask, path_transform_t1tob0, 
+                         path_b0_brain_mask, path_b0_brain_mask_dilated, path_tensor, path_fa, path_md):
+    """Generate FA, MD maps from DWI data.
+
+    Args:
+        path_dwi (str): Path to the DWI data (single shell preferred)
+        path_bval (str): Path to the b-value file
+        path_bvec (str): Path to the b-vector file
+        path_b0 (str): Path to the b0 volume extracted from the DWI data
+        path_t1_brain_mask (str): Path to the T1w brain mask
+        path_transform_t1tob0 (str): Path to the ANTs transformation from T1w to b0 space 
+        path_b0_brain_mask (str): Path to save the brain mask in b0 space 
+        path_b0_brain_mask_dilated (str): Path to save the dilated brain mask in b0 space 
+        path_tensor (str): Path to save the tensor image 
+        path_fa (str): Path to save the FA map 
+        path_md (str): Path to save the MD map 
+    """
     
-    pass
+    print('Transforming the T1w brain mask to b0 space. Output: {}'.format(path_b0_brain_mask))
+    subprocess.run(['mkdir', '-p', str(Path(path_b0_brain_mask).parent)])
+    command = ['antsApplyTransforms', '-d', '3', '-i', path_t1_brain_mask, '-r', path_b0, '-n', 'NearestNeighbor', 
+               '-t', path_transform_t1tob0, '-o', path_b0_brain_mask]
+    subprocess.run(command)
+    
+    print('Dilating the b0 brain mask. Output: {}'.format(path_b0_brain_mask_dilated))
+    command = ['fslmaths', path_b0_brain_mask, '-dilM', path_b0_brain_mask_dilated]
+    subprocess.run(command)
+    
+    print('Calculating the tensor. Output: {}'.format(path_tensor))
+    subprocess.run(['mkdir', '-p', str(Path(path_tensor).parent)])
+    command = ['dwi2tensor', path_dwi, path_tensor, '-fslgrad', path_bvec, path_bval, '-mask', path_b0_brain_mask_dilated]
+    subprocess.run(command)
+    
+    print('Calculating the FA. Output: {}'.format(path_fa))
+    command = ['tensor2metric', path_tensor, '-fa', path_fa, '-mask', path_b0_brain_mask_dilated]
+    subprocess.run(command)
+
+    print('Calculating the MD. Output: {}'.format(path_md))
+    command = ['tensor2metric', path_tensor, '-adc', path_md, '-mask', path_b0_brain_mask_dilated]
+    subprocess.run(command)

@@ -88,12 +88,48 @@ list_subject = [subject for subject in path_dataset.iterdir() if subject.name.st
                             
 # print('Extracting single shell and b0 done.')
 
-# Registrations (b0 to MNI152): prepare transformation files
-print('Preparing list of jobs for registrations in parallel...')
-path_MNI152 = '/nfs2/ForChenyu/MNI_152.nii.gz'
+# # Registrations (b0 to MNI152): prepare transformation files
+# print('Preparing list of jobs for registrations in parallel...')
+# path_MNI152 = '/nfs2/ForChenyu/MNI_152.nii.gz'
 
-list_tuple_jobs = []
+# list_tuple_jobs = []
 
+# for subject in tqdm(path_dataset.iterdir(), total=len(list_subject)):
+#     if not (subject.name.startswith('sub-') and subject.is_dir()):
+#         continue
+    
+#     for session in subject.iterdir():
+#         if not (session.name.startswith('ses-') and session.is_dir()):
+#             continue
+        
+#         for scan in session.iterdir():
+#             if not (scan.name.startswith('scan-') and scan.is_dir()):
+#                 continue
+            
+#             # inputs
+#             path_b0 = scan / 'firstshell' / 'dwmri_firstshell_b0.nii.gz'
+#             path_t1 = scan / 't1w' / 't1w.nii.gz'
+#             path_t1_brain = scan / 't1w_brain_mask' / 't1w_brain.nii.gz'
+#             INPUTS_COMPLETE = path_b0.is_file() and path_t1.is_file() and path_t1_brain.is_file()
+            
+#             # outputs
+#             outdir = scan / 'transform'
+#             b0_to_t1_ants = outdir / 'transform_b0tot1.txt'
+#             t1_to_b0_ants = outdir / 'transform_t1tob0.txt'
+#             t1_to_template_affine = outdir / 'transform_t1toMNI_affine.mat'
+#             OUTPUTS_COMPLETE = b0_to_t1_ants.is_file() and t1_to_b0_ants.is_file() and t1_to_template_affine.is_file()
+
+#             if INPUTS_COMPLETE and not OUTPUTS_COMPLETE:
+#                 list_tuple_jobs.append((path_b0, path_t1, path_t1_brain, path_MNI152, outdir))
+
+# print('Number of jobs created: {}\nAssign them to parallel workers...'.format(len(list_tuple_jobs)))
+# with Pool(processes=8) as pool:
+#     results = list(tqdm(pool.imap(single_job_for_parallel_register_b0_to_MNI152, list_tuple_jobs, chunksize=1), total=len(list_tuple_jobs)))
+# print('Registrations done.')
+
+
+# Calculate the FA and MD maps (will need conda environment utls)
+print('Start calculating FA and MD maps...')
 for subject in tqdm(path_dataset.iterdir(), total=len(list_subject)):
     if not (subject.name.startswith('sub-') and subject.is_dir()):
         continue
@@ -107,23 +143,23 @@ for subject in tqdm(path_dataset.iterdir(), total=len(list_subject)):
                 continue
             
             # inputs
+            path_dwi = scan / 'firstshell' / 'dwmri_firstshell.nii.gz'
+            path_bval = scan / 'firstshell' / 'dwmri_firstshell.bval'
+            path_bvec = scan / 'firstshell' / 'dwmri_firstshell.bvec'
             path_b0 = scan / 'firstshell' / 'dwmri_firstshell_b0.nii.gz'
-            path_t1 = scan / 't1w' / 't1w.nii.gz'
-            path_t1_brain = scan / 't1w_brain_mask' / 't1w_brain.nii.gz'
-            INPUTS_COMPLETE = path_b0.is_file() and path_t1.is_file() and path_t1_brain.is_file()
+            path_t1_brain_mask = scan / 't1w_brain_mask' / 't1w_brain_mask.nii.gz'
+            path_transform_t1tob0 = scan / 'transform' / 'transform_t1tob0.txt'
+            INPUTS_COMPLETE = path_dwi.is_file() and path_bval.is_file() and path_bvec.is_file() and path_b0.is_file() and path_t1_brain_mask.is_file() and path_transform_t1tob0.is_file()
             
             # outputs
-            outdir = scan / 'transform'
-            b0_to_t1_ants = outdir / 'transform_b0tot1.txt'
-            t1_to_b0_ants = outdir / 'transform_t1tob0.txt'
-            t1_to_template_affine = outdir / 'transform_t1toMNI_affine.mat'
-            OUTPUTS_COMPLETE = b0_to_t1_ants.is_file() and t1_to_b0_ants.is_file() and t1_to_template_affine.is_file()
-
+            path_b0_brain_mask = scan / 'brain_mask' / 'brain_mask_b0.nii.gz'
+            path_b0_brain_mask_dilated = scan / 'brain_mask' / 'brain_mask_b0_dilated.nii.gz'
+            path_tensor = scan / 'dti_fitting' / 'tensor.nii.gz'
+            path_fa = scan / 'dti_fitting' / 'fa.nii.gz'
+            path_md = scan / 'dti_fitting' / 'md.nii.gz'
+            OUTPUTS_COMPLETE = path_b0_brain_mask.is_file() and path_b0_brain_mask_dilated.is_file() and path_tensor.is_file() and path_fa.is_file() and path_md.is_file()     
+            
             if INPUTS_COMPLETE and not OUTPUTS_COMPLETE:
-                list_tuple_jobs.append((path_b0, path_t1, path_t1_brain, path_MNI152, outdir))
-
-print('Number of jobs created: {}\nAssign them to parallel workers...'.format(len(list_tuple_jobs)))
-with Pool(processes=8) as pool:
-    results = list(tqdm(pool.imap(single_job_for_parallel_register_b0_to_MNI152, list_tuple_jobs, chunksize=1), total=len(list_tuple_jobs)))
-print('Registrations done.')
-
+                braid.calculate_dti_scalars.calculate_fa_md_maps(path_dwi, path_bval, path_bvec, path_b0, path_t1_brain_mask, path_transform_t1tob0, path_b0_brain_mask, path_b0_brain_mask_dilated, path_tensor, path_fa, path_md)
+print('Calculating FA and MD maps done.')
+print('Now HCPA should contain all necessary files for completing preprocessing,\njust like the first 11 datasets!!!')
