@@ -2,6 +2,7 @@
 # Author: Michael Kim, Chenyu Gao
 # Date: Nov 20, 2023
 
+import subprocess
 import numpy as np
 import pandas as pd
 import nibabel as nib
@@ -72,16 +73,35 @@ def extract_single_shell(path_dwi_in, path_bval_in, path_bvec_in, path_dwi_out, 
     nii_dwi_out = nib.Nifti1Image(data_dwi_out, nii_dwi_in.affine)
     nib.save(nii_dwi_out, path_dwi_out)
 
+def run_mri_synthstrip(path_input, path_brain, path_mask, path_synthstrip_wrapper='/nfs/masi/gaoc11/Containers/synthstrip-singularity'):
+    """
+    Run the mri_synthstrip command-line tool to perform brain extraction on MRI images.
 
-# test
-path_dwi_in = '/nfs2/harmonization/BIDS/HCPA/derivatives/sub-HCA6439780/PreQual/PREPROCESSED/dwmri.nii.gz'
-path_bval_in = '/nfs2/harmonization/BIDS/HCPA/derivatives/sub-HCA6439780/PreQual/PREPROCESSED/dwmri.bval'
-path_bvec_in = '/nfs2/harmonization/BIDS/HCPA/derivatives/sub-HCA6439780/PreQual/PREPROCESSED/dwmri.bvec'
-path_dwi_out = '/nfs/masi/gaoc11/projects/BRAID/data/test_preproc/dwmri.nii.gz'
-path_bval_out = '/nfs/masi/gaoc11/projects/BRAID/data/test_preproc/dwmri.bval'
-path_bvec_out = '/nfs/masi/gaoc11/projects/BRAID/data/test_preproc/dwmri.bvec'
+    Args:
+        path_input (str): Path to the input MRI image.
+        path_brain (str): Path to save the extracted brain image.
+        path_mask (str): Path to save the binary brain mask.
 
-extract_single_shell(path_dwi_in, path_bval_in, path_bvec_in, path_dwi_out, path_bval_out, path_bvec_out, threshold=1500)
+    Returns:
+        None
+    """
+    if Path(path_synthstrip_wrapper).is_file():
+        subprocess.run([path_synthstrip_wrapper, '-i', path_input, '-o', path_brain, '-m', path_mask])
+    else:
+        print('ERROR: Cannot find the synthstrip wrapper at: {}'.format(path_synthstrip_wrapper))
 
-# =============================================================================
+def extract_b0_volume(path_dwi, path_bval, path_bvec, path_b0):
+    if not (Path(path_dwi).is_file() and Path(path_bval).is_file() and Path(path_bvec).is_file()):
+        raise FileNotFoundError(path_dwi)
+        
+    command1 = ['dwiextract', path_dwi, '-fslgrad', path_bvec, path_bval, '-', '-bzero']
+    command2 = ['mrmath', '-', 'mean', path_b0, '-axis', '3']
+    
+    process1 = subprocess.Popen(command1, stdout=subprocess.PIPE)
+    output1, _ = process1.communicate()
+    
+    process2 = subprocess.run(command2, input=output1, check=True)
 
+def calculate_fa_md_maps(path_dwi, path_bval, path_bvec, path_b0, path_t1_brain_mask, path_transform_t1tob0, path_fa, path_md):
+    
+    pass
