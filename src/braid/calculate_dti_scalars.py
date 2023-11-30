@@ -141,3 +141,17 @@ def calculate_fa_md_maps(path_dwi, path_bval, path_bvec, path_b0, path_t1_brain_
     print('Calculating the MD. Output: {}'.format(path_md))
     command = ['tensor2metric', path_tensor, '-adc', path_md, '-mask', path_b0_brain_mask_dilated]
     subprocess.run(command)
+
+def apply_skull_strip_mask(path_input, path_mask, path_output):
+    """Apply a binary brain mask to an input image. The input and the mask should be in the same space.
+    We assume the binary mask is 0 for background, and 1 for brain, and there is no other value in the mask.
+
+    Args:
+        path_input (str): Path to the input image
+        path_mask (str): Path to the brain mask
+        path_output (str): Path to save the output image
+    """
+    
+    command = ['fslmaths', str(path_input), '-mul', str(path_mask), str(path_output)]
+    subprocess.run(command)
+    
