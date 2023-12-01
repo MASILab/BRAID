@@ -38,6 +38,7 @@ print("collecting inputs for all jobs for parallel processing...")
 list_tuple_job = []
 
 for dataset in path_databank_root.iterdir():
+    print("\tsearching through dataset: {}".format(dataset.name))
     
     for subject in dataset.iterdir():
         if not (subject.name.startswith('sub-') and subject.is_dir()):
@@ -70,7 +71,9 @@ for dataset in path_databank_root.iterdir():
                 
                 if INPUTS_COMPLETE and not OUTPUTS_COMPLETE:
                     list_tuple_job.append((path_fa, path_md, path_brain_mask_b0, path_transform_b0tot1, path_transform_t1toMNI_affine, path_fa_ss, path_md_ss, path_fa_ss_mni, path_md_ss_mni))
-
+                elif not INPUTS_COMPLETE:
+                    print("\t\tincomplete inputs: {}".format(scan))
+                    
 print("Number of jobs created: {}\nAssign them to parallel workers...".format(len(list_tuple_job)))
 with Pool(processes=8) as pool:
     results = list(tqdm(pool.imap(single_job_for_preprocessing, list_tuple_job, chunksize=1), total=len(list_tuple_job)))
