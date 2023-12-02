@@ -1,6 +1,8 @@
+import subprocess
 import nibabel as nib
 import matplotlib.pyplot as plt
 import numpy as np
+from pathlib import Path
 
 def generate_qa_screenshot_fa_md(path_fa, path_md, path_png, offset=0):
     
@@ -21,7 +23,7 @@ def generate_qa_screenshot_fa_md(path_fa, path_md, path_png, offset=0):
         }
     ]
     
-    fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(24, 15))
+    fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(24, 14))
     
     for dict_plot in list_dict_plot:
         img = nib.load(dict_plot['path'])
@@ -65,11 +67,12 @@ def generate_qa_screenshot_fa_md(path_fa, path_md, path_png, offset=0):
             vmax=dict_plot['vmax']
         )
     
-    # Adjust the spacing    
-    plt.subplots_adjust(wspace=0.1, hspace=0.1)    
+    # Adjust the spacing and save the png
+    plt.subplots_adjust(wspace=0.1, hspace=0.1)
+
+    if Path(path_png).parent.exists() == False:
+        subprocess.run(['mkdir', '-p', Path(path_png).parent])
+
     fig.savefig(path_png, bbox_inches='tight')
     plt.close('all')
 
-
-# TODO: test
-# generate_qa_screenshot_fa_md(path_fa, path_md, path_png, offset=0)
