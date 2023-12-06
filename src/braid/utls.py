@@ -76,3 +76,34 @@ def generate_qa_screenshot_fa_md(path_fa, path_md, path_png, offset=0):
     fig.savefig(path_png, bbox_inches='tight')
     plt.close('all')
 
+def summarize_dataset(df):
+    
+    # generate unique subject ID across databank
+    df['dataset_subject'] = df['dataset'] + '_' + df['subject']
+    
+    # for each subject, select the earliest scan with age available
+    df = df.groupby('dataset_subject').apply(lambda x: x[x['age'].notnull()].nsmallest(1, 'age')).reset_index(drop=True)
+    
+    # cognitively normal
+    num_subject = df.loc[df['control_label']==1, 'dataset_subject'].unique().shape[0]
+    age_min = df.loc[df['control_label']==1, 'age'].min()
+    age_max = df.loc[df['control_label']==1, 'age'].max()
+    age_mean = df.loc[df['control_label']==1, 'age'].mean()
+    age_std = df.loc[df['control_label']==1, 'age'].std()
+    print(f"#subjects (cognitively normal): {num_subject} \t ({age_min:.1f}-{age_max:.1f} yrs / {age_mean:.1f} ± {age_std:.1f} yrs)") 
+                    
+    # cognitively impaired
+    num_subject = df.loc[df['control_label']==0, 'dataset_subject'].unique().shape[0]
+    age_min = df.loc[df['control_label']==0, 'age'].min()
+    age_max = df.loc[df['control_label']==0, 'age'].max()
+    age_mean = df.loc[df['control_label']==0, 'age'].mean()
+    age_std = df.loc[df['control_label']==0, 'age'].std()
+    print(f"#subjects (cognitively impaired): {num_subject} \t ({age_min:.1f}-{age_max:.1f} yrs / {age_mean:.1f} ± {age_std:.1f} yrs)") 
+
+    # total
+    num_subject = df['dataset_subject'].unique().shape[0]
+    age_min = df['age'].min()
+    age_max = df['age'].max()
+    age_mean = df['age'].mean()
+    age_std = df['age'].std()
+    print(f"#subjects (total): {num_subject} \t ({age_min:.1f}-{age_max:.1f} yrs / {age_mean:.1f} ± {age_std:.1f} yrs)") 
