@@ -1,14 +1,16 @@
-# Summarize, visualize the distribution of the data in the data bank.
-# 
-# Author: Chenyu Gao
-# Date: Dec 6, 2023
+"""
+Summarize, visualize the distribution of the data in the data bank.
+
+Author: Chenyu Gao
+Date: Dec 6, 2023
+"""
 
 import pandas as pd
 import seaborn as sns
 from braid.utls import summarize_dataset
 
-MIN = 46
-MAX = 92
+MIN = 45
+MAX = 90
 
 df = pd.read_csv('/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/quality_assurance/databank_dti_after_pngqa_after_adspqa.csv')
 
