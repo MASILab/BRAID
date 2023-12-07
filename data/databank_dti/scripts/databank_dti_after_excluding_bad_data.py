@@ -81,10 +81,10 @@ df_png = pd.DataFrame({'dataset': list_df_dataset,
                        'age': list_df_age,
                        'control_label': list_df_control_label})
 
-df_png.to_csv('./data/databank_dti/quality_assurance/databank_dti_after_pngqa.csv', index=False)
+df_png.to_csv('/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/quality_assurance/databank_dti_after_pngqa.csv', index=False)
 
 # Print out databank summary
-df_png = pd.read_csv('./data/databank_dti/quality_assurance/databank_dti_after_pngqa.csv')
+df_png = pd.read_csv('/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/quality_assurance/databank_dti_after_pngqa.csv')
 print('============Summary of the databank after the PNG QA============')
 print('------------Overall------------')
 summarize_dataset(df_png.copy())
@@ -121,7 +121,8 @@ df_adsp_whitelist = pd.DataFrame({
 # standardize dataset names
 df_adsp_whitelist['dataset'] = df_adsp_whitelist['dataset'].str.replace('ADNI_DTI', 'ADNI')
 
-print('Looping through the remaining samples after the PNG QA...\n')
+print('\nNow filtering the databank with the list of scans that passed ADSP QA...\n'
+      f'Datasets that have been checked during the ADSP QA: {df_adsp_whitelist["dataset"].unique()}')
 for i, row in df_png.iterrows():
     if not row['dataset'] in df_adsp_whitelist['dataset'].unique():
         continue
@@ -129,12 +130,12 @@ for i, row in df_png.iterrows():
         if df_adsp_whitelist.loc[(df_adsp_whitelist['dataset'] == row['dataset']) 
                                  & (df_adsp_whitelist['subject'] == row['subject']) 
                                  & (df_adsp_whitelist['session'] == row['session'])].shape[0] == 0:
-            print(f"\tdropped {row['dataset']} {row['subject']} {row['session']} {row['scan']}")
+            print(f"\tdropped {row['dataset']} {row['subject']} {row['session']} scan-{row['scan']}")
             df_png.drop(index=i, inplace=True)
-df_png.to_csv('./data/databank_dti/quality_assurance/databank_dti_after_pngqa_after_adspqa.csv', index=False)
+df_png.to_csv('/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/quality_assurance/databank_dti_after_pngqa_after_adspqa.csv', index=False)
 
 # Print out databank summary
-df_png = pd.read_csv('./data/databank_dti/quality_assurance/databank_dti_after_pngqa_after_adspqa.csv')
+df_png = pd.read_csv('/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/quality_assurance/databank_dti_after_pngqa_after_adspqa.csv')
 print('============Summary of the databank after the PNG QA AND the ADSP QA============')
 print('------------Overall------------')
 summarize_dataset(df_png.copy())
