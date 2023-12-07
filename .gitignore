@@ -1,4 +1,5 @@
 # Data
+data/databank_dti/quality_assurance/
 data/subject_info/clean/
 data/subject_info/raw/ABVIB/UDS_A1_SUBJECT_DEMOGRAPHICS_05Sep2023.csv
 data/subject_info/raw/ABVIB/UDS_A1_SUBJECT_DEMOGRAPHICS_DICT_05Sep2023.csv
