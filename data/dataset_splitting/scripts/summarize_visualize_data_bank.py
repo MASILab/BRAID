@@ -1,46 +1,46 @@
-# Visualize the distribution of the data in the data bank.
+# Summarize, visualize the distribution of the data in the data bank.
+# 
 # Author: Chenyu Gao
-# Date: Nov 13, 2023
+# Date: Dec 6, 2023
 
-from pathlib import Path
 import pandas as pd
 import seaborn as sns
+from braid.utls import summarize_dataset
 
-clean_csv_root = Path('./data/subject_info/clean')
+MIN = 46
+MAX = 92
 
-dict_dx2standard = {
-    'No Cognitive Impairment': 'normal',
-    'Mild Cognitive Impairment': 'MCI',
-    "Alzheimer's Dementia": 'AD',
-    'CN': 'normal',
-    'EMCI': 'other_disease',
-    'SMC': 'other_disease',
-    'LMCI': 'other_disease',
-    'Patient': 'other_disease',
-    }
+df = pd.read_csv('/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/quality_assurance/databank_dti_after_pngqa_after_adspqa.csv')
 
-for csv in clean_csv_root.iterdir():
-    if not csv.name.endswith('_info.csv'):
-        continue
-    
-    # Load the csv for each dataset
-    dataset_name = csv.name.split('_')[0]
-    demog = pd.read_csv(csv)
+df_base = df.copy()
+df_base['dataset_subject'] = df_base['dataset'] + '_' + df_base['subject']
+df_base = df_base.groupby('dataset_subject').apply(lambda x: x[x['age'].notnull()].nsmallest(1, 'age')).reset_index(drop=True)
 
-    if dataset_name == 'UKBB':
-        # use the CNS_control_2 column to determine class
-        demog['diagnosis'] = demog['CNS_control_2'].apply(lambda x: 'control' if x == 1 else 'disease')
-        plot = sns.displot(demog, x="age", col="diagnosis", row="sex", hue='race', multiple='stack',
-                           binwidth=3, height=3, facet_kws=dict(margin_titles=True))
-    else:
-        # remap diagnosis for visualizations
-        print("{} diagnosis classes before remapping: ".format(dataset_name), demog['diagnosis'].unique())
-        demog['diagnosis'] = demog['diagnosis'].map(dict_dx2standard).fillna(demog['diagnosis'])
-        print("{} diagnosis classes after remapping: ".format(dataset_name), demog['diagnosis'].unique())
+# Distribution plot - scans
+plot = sns.displot(df, x="age", col="control_label", hue='dataset', multiple='stack',
+                   binwidth=1, height=3, facet_kws=dict(margin_titles=True))
 
-        plot = sns.displot(demog, x="age", col="diagnosis", row="sex", hue='race', multiple='stack',
-                        binwidth=3, height=3, facet_kws=dict(margin_titles=True))
-    
-    plot.fig.suptitle(dataset_name, y=1.02)
-    plot.savefig(f"./data/dataset_splitting/figs/displot/{dataset_name}_distribution.png")
-    
+plot.refline(x=MIN, color='red', linestyle='--')
+plot.refline(x=MAX, color='red', linestyle='--')
+
+plot.fig.suptitle("Imaging Ages of All Scans from All Subjects", y=1.02)
+plot.savefig("./reports/figures/2023-12-06_databank_distribution/age_distribution_all_scans.png", dpi=300)
+
+# Distribution plot - base visit only
+plot = sns.displot(df_base, x="age", col="control_label", hue='dataset', multiple='stack',
+                   binwidth=1, height=3, facet_kws=dict(margin_titles=True))
+
+plot.refline(x=MIN, color='red', linestyle='--')
+plot.refline(x=MAX, color='red', linestyle='--')
+
+plot.fig.suptitle("Imaging Ages of Baseline Scans from All Subjects", y=1.02)
+plot.savefig("./reports/figures/2023-12-06_databank_distribution/age_distribution_baseline.png", dpi=300)
+
+# Summary of the dataset
+print('------------Overall------------')
+df_s = df.loc[(df['age']>=MIN) & (df['age']<=MAX),].copy()
+summarize_dataset(df_s)
+
+for dataset in df_s['dataset'].unique():
+    print(f"------------{dataset}------------")
+    summarize_dataset(df_s.loc[df_s['dataset'] == dataset, ].copy())

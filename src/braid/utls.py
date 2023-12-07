@@ -103,7 +103,7 @@ def summarize_dataset(df):
     age_mean = df_base.loc[df_base['control_label']==0, 'age'].mean()
     age_std = df_base.loc[df_base['control_label']==0, 'age'].std()
     num_scans = df.loc[df['control_label']==0, ].shape[0]
-    print(f"#Subjects (normal): {num_subject}\t"
+    print(f"#Subjects (impair): {num_subject}\t"
           f"#Scans: {num_scans}\t"
           f"Age range: {age_min:.1f}-{age_max:.1f} yrs\t"
           f"mean ± std: {age_mean:.1f} ± {age_std:.1f} yrs")
@@ -115,7 +115,7 @@ def summarize_dataset(df):
     age_mean = df_base['age'].mean()
     age_std = df_base['age'].std()
     num_scans = df.shape[0]
-    print(f"#Subjects (normal): {num_subject}\t"
+    print(f"#Subjects (total ): {num_subject}\t"
           f"#Scans: {num_scans}\t"
           f"Age range: {age_min:.1f}-{age_max:.1f} yrs\t"
           f"mean ± std: {age_mean:.1f} ± {age_std:.1f} yrs")
