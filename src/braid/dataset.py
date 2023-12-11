@@ -1,7 +1,5 @@
 import torch
-from torch.utils.data import Dataset, DataLoader
-import torch.nn as nn
-import torch.optim as optim
+from torch.utils.data import Dataset
 from monai.transforms import (
     Compose, 
     LoadImaged, 
@@ -79,14 +77,16 @@ class BRAID_Dataset(Dataset):
 
         if mode not in ['train', 'test']: raise ValueError("mode must be either 'train' or 'test'")
 
-        if subjects != 'all':
+        if type(subjects) == str:
+            if subjects == 'all': 
+                self.df = self.df.loc[(self.df['age'] >= self.age_min) & (self.df['age'] <= self.age_max), ]
+            else:
+                raise ValueError("subjects must be either 'all' or a list/array of subjects")
+        else:
             if not '_' in subjects[0]: raise ValueError("subject format must be 'dataset_subject'")
             self.df = self.df.loc[(self.df['age'] >= self.age_min) &
                                   (self.df['age'] <= self.age_max) &
                                   (self.df['dataset_subject'].isin(self.subjects)), ]
-        else:
-            self.df = self.df.loc[(self.df['age'] >= self.age_min) &
-                                  (self.df['age'] <= self.age_max), ]
 
         if mode == 'train':
             self.df['sample_weight'] = 1 / self.df.groupby('dataset_subject')['dataset_subject'].transform('count')
@@ -99,14 +99,15 @@ class BRAID_Dataset(Dataset):
             while True:
                 age_start = random.choices(range(self.age_min, self.age_max), k=1)[0]
                 age_end = age_start + 1
-                samples = self.df.loc[(self.df['age']>=age_start) & (self.df['age']<=age_end), ]
-                if samples.shape[0] >= 1: break
+                samples = self.df.loc[(self.df['age'] >= age_start) & (self.df['age'] <= age_end), ]
+                if samples.shape[0] >= 1:
+                    break
             row = samples.sample(n=1, weights='sample_weight')
         else:
             row = self.df.iloc[idx]
-            
-        fa = self.dataset_root / row['dataset'] / row['subject'] / row['session'] / row['scan'] / 'fa_skullstrip_MNI152.nii.gz'
-        md = self.dataset_root / row['dataset'] / row['subject'] / row['session'] / row['scan'] / 'md_skullstrip_MNI152.nii.gz'
+        
+        fa = self.dataset_root / row['dataset'].item() / row['subject'].item() / row['session'].item() / f"scan-{row['scan'].item()}" / 'fa_skullstrip_MNI152.nii.gz'        
+        md = self.dataset_root / row['dataset'].item() / row['subject'].item() / row['session'].item() / f"scan-{row['scan'].item()}" / 'md_skullstrip_MNI152.nii.gz'
         data_dict = {'fa': fa, 'md': md}
         transform = Compose([
             LoadImaged(keys=['fa', 'md'], image_only=False),
@@ -120,8 +121,8 @@ class BRAID_Dataset(Dataset):
         data_dict = transform(data_dict)
         images = data_dict['images']
         
-        sex = row['sex']
-        race = row['race_simple']
+        sex = row['sex'].item()
+        race = row['race_simple'].item()
         label_feature = vectorize_sex_race(sex, race)
                 
         age = torch.tensor(row['age'].values[0], dtype=torch.float32)
