@@ -35,8 +35,14 @@ def vectorize_sex_race(
         'unknown': [0.25, 0.25, 0.25, 0.25],
     }
     
-    sex = sex.lower()
-    race = race.lower()
+    try:
+        sex = sex.lower()
+    except:
+        sex = 'unknown'
+    try:
+        race = race.lower()
+    except:
+        race = 'unknown'
 
     if sex in sex2vec.keys():
         vec_sex = sex2vec[sex]
