@@ -2,7 +2,16 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn
 import torch.optim as optim
-from monai.transforms import Compose, LoadImaged, AddChanneld, ToTensord, EnsureChannelFirstd, ResizeD
+from monai.transforms import (
+    Compose, 
+    LoadImaged, 
+    EnsureChannelFirstd,
+    Orientationd, 
+    CenterSpatialCropd,
+    Spacingd, 
+    ToTensord,
+    ConcatItemsd,
+    )
 import pandas as pd
 import numpy as np
 import random
@@ -12,10 +21,39 @@ def vectorize_sex_race(
     sex: str,
     race: str,
     ) -> torch.Tensor:
+
+    sex2vec = {
+        'female': [1, 0],
+        'male': [0, 1],
+        'unknown': [0.5, 0.5],
+    }
+
+    race2vec = {
+        'white': [1, 0, 0, 0], 
+        'asian': [0, 1, 0, 0], 
+        'black or african american': [0, 0, 1, 0],
+        'American Indian or Alaska Native': [0, 0, 0, 1],
+        'some other race': [0.25, 0.25, 0.25, 0.25],
+        'unknown': [0.25, 0.25, 0.25, 0.25],
+    }
     
-    pass
-#TODO: finish this function
+    sex = sex.lower()
+    race = race.lower()
+
+    if sex in sex2vec.keys():
+        vec_sex = sex2vec[sex]
+    else:
+        vec_sex = sex2vec['unknown']
+    vec_sex = torch.tensor(vec_sex, dtype=torch.float32)
     
+    if race in race2vec.keys():
+        vec_race = race2vec[race]
+    else:
+        vec_race = race2vec['unknown']
+    vec_race = torch.tensor(vec_race, dtype=torch.float32)
+
+    return torch.cat((vec_sex, vec_race), dim=0)
+
 
 class BRAID_Dataset(Dataset):
     def __init__(
@@ -28,7 +66,7 @@ class BRAID_Dataset(Dataset):
         mode: str = 'train',
     ) -> None:
         
-        self.dataset_root = dataset_root
+        self.dataset_root = Path(dataset_root)
         self.df = pd.read_csv(csv_file)
         self.subjects = subjects
         self.age_min = age_min
@@ -67,4 +105,25 @@ class BRAID_Dataset(Dataset):
         else:
             row = self.df.iloc[idx]
             
-        # TODO: after finishing vectorize_sex_race
+        fa = self.dataset_root / row['dataset'] / row['subject'] / row['session'] / row['scan'] / 'fa_skullstrip_MNI152.nii.gz'
+        md = self.dataset_root / row['dataset'] / row['subject'] / row['session'] / row['scan'] / 'md_skullstrip_MNI152.nii.gz'
+        data_dict = {'fa': fa, 'md': md}
+        transform = Compose([
+            LoadImaged(keys=['fa', 'md'], image_only=False),
+            EnsureChannelFirstd(keys=['fa', 'md']),
+            Orientationd(keys=['fa', 'md'], axcodes="RAS"),
+            CenterSpatialCropd(keys=['fa', 'md'], roi_size=(192, 228, 192)),
+            Spacingd(keys=['fa', 'md'], pixdim=(1.5, 1.5, 1.5), mode=('bilinear', 'bilinear')),  # expected: 128 x 152 x 128, 1.5mm^3
+            ToTensord(keys=['fa', 'md']),
+            ConcatItemsd(keys=['fa', 'md'], name='images')  
+        ])
+        data_dict = transform(data_dict)
+        images = data_dict['images']
+        
+        sex = row['sex']
+        race = row['race_simple']
+        label_feature = vectorize_sex_race(sex, race)
+                
+        age = torch.tensor(row['age'].values[0], dtype=torch.float32)
+
+        return images, label_feature, age
