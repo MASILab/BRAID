@@ -108,12 +108,12 @@ class BRAID_Dataset(Dataset):
                 samples = self.df.loc[(self.df['age'] >= age_start) & (self.df['age'] <= age_end), ]
                 if samples.shape[0] >= 1:
                     break
-            row = samples.sample(n=1, weights='sample_weight')
+            row = samples.sample(n=1, weights='sample_weight').iloc[0]
         else:
             row = self.df.iloc[idx]
         
-        fa = self.dataset_root / row['dataset'].item() / row['subject'].item() / row['session'].item() / f"scan-{row['scan'].item()}" / 'fa_skullstrip_MNI152.nii.gz'        
-        md = self.dataset_root / row['dataset'].item() / row['subject'].item() / row['session'].item() / f"scan-{row['scan'].item()}" / 'md_skullstrip_MNI152.nii.gz'
+        fa = self.dataset_root / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'fa_skullstrip_MNI152.nii.gz'        
+        md = self.dataset_root / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'md_skullstrip_MNI152.nii.gz'
         data_dict = {'fa': fa, 'md': md}
         transform = Compose([
             LoadImaged(keys=['fa', 'md'], image_only=False),
@@ -127,8 +127,8 @@ class BRAID_Dataset(Dataset):
         data_dict = transform(data_dict)
         images = data_dict['images']
         
-        sex = row['sex'].item()
-        race = row['race_simple'].item()
+        sex = row['sex']
+        race = row['race_simple']
         label_feature = vectorize_sex_race(sex, race)
                 
         age = torch.tensor(row['age'].values[0], dtype=torch.float32)
