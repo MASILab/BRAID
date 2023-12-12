@@ -131,6 +131,6 @@ class BRAID_Dataset(Dataset):
         race = row['race_simple']
         label_feature = vectorize_sex_race(sex, race)
                 
-        age = torch.tensor(row['age'].values[0], dtype=torch.float32)
+        age = torch.tensor(row['age'], dtype=torch.float32)
 
         return images, label_feature, age

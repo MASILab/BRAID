@@ -1,10 +1,11 @@
 """
-TODO: add description
+Train the model using the configuration in yaml file.
 
 Author: Chenyu Gao
 Date: Dec 11, 2023
 """
 
+import gc
 import yaml
 import argparse
 import torch
@@ -15,10 +16,11 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 from braid.dataset import BRAID_Dataset
 from braid.models import get_the_resnet_model
+from braid.utls import generate_png_during_training
 from torch.utils.tensorboard import SummaryWriter
 
 if __name__ == "__main__":  
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda')
     
     # User input: yaml file of the training configuration
     parser = argparse.ArgumentParser()
@@ -59,14 +61,14 @@ if __name__ == "__main__":
             batch_size = config['optimization']['batch_size'], 
             shuffle = True, 
             num_workers = config['optimization']['num_workers'],
-            pin_memory = False
+            pin_memory = True
             )
         dataloader_val = DataLoader(
             dataset_val, 
             batch_size = config['optimization']['batch_size'], 
             shuffle = False, 
             num_workers = config['optimization']['num_workers'],
-            pin_memory = False
+            pin_memory = True
             )
 
         # Model
@@ -118,7 +120,15 @@ if __name__ == "__main__":
             optimizer.zero_grad()
             for i, (images, label_feature, age) in enumerate(tqdm(dataloader_train)):
                 images, label_feature, age = images.to(device, non_blocking=True), label_feature.to(device, non_blocking=True), age.to(device, non_blocking=True)
-                # TODO: generate PNG for sanity check
+                
+                if (i+1) % 100 == 0:
+                    gc.collect()
+                    torch.cuda.empty_cache()
+                    if config['output']['png_sanity_check'] != '':
+                        generate_png_during_training(
+                            img_tensor = images[0,:,:,:,:].cpu(), 
+                            path_png = Path(config['output']['png_sanity_check']) / f"fold-{fold_idx}_epoch-{epoch}_batch-{i}_age-{age[0].cpu().numpy():.1f}.png"
+                        )
                             
                 with torch.autocast('cuda'):
                     output = model(images, label_feature)
@@ -136,11 +146,11 @@ if __name__ == "__main__":
             epoch_loss = epoch_loss / len(dataloader_train)
             writer.add_scalar('Train/Loss', epoch_loss, epoch)
 
-            # validation set
+            # validation
             model.eval()
             val_loss = 0.0
             with torch.no_grad():
-                for images, label_feature, age in dataloader_val:
+                for images, label_feature, age in tqdm(dataloader_val):
                     images, label_feature, age = images.to(device, non_blocking=True), label_feature.to(device, non_blocking=True), age.to(device, non_blocking=True)
 
                     output = model(images, label_feature)

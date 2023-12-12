@@ -31,4 +31,5 @@ output:
   weights_local_dir: '/home-local/models/2023-12-11_ResNet18/weights/'
   weights_server_dir: '/nfs/masi/gaoc11/projects/BRAID/models/2023-12-11_ResNet18/weights/'
   tensorboard: '/nfs/masi/gaoc11/projects/BRAID/models/2023-12-11_ResNet18/runs/'
+  png_sanity_check: '/nfs/masi/gaoc11/projects/BRAID/models/2023-12-11_ResNet18/sanity_check/'
 

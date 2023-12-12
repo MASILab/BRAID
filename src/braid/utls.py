@@ -119,3 +119,64 @@ def summarize_dataset(df):
           f"#Scans: {num_scans}\t"
           f"Age range: {age_min:.1f}-{age_max:.1f} yrs\t"
           f"mean ± std: {age_mean:.1f} ± {age_std:.1f} yrs")
+
+
+def generate_png_during_training(img_tensor, path_png):
+    """function for generating PNG for sanity check during model training.
+
+    Args:
+        img_tensor (torch.tensor): torch tensor (on CPU) in (2, 128, 152, 128)
+        path_png (str): path to save the PNG 
+    """
+
+    list_dict_plot = [
+        {'idx': 0, 'metric' : 'FA', 'vmax' : 1, 'vmin': 0},
+        {'idx': 1, 'metric' : 'MD', 'vmax' : 0.003, 'vmin': 0},
+        ]
+    
+    fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(24, 14))
+    
+    for dict_plot in list_dict_plot:
+        data = img_tensor[dict_plot['idx'],:,:,:].numpy()
+        resolution = data.shape[:3]
+        
+        # axial
+        axes[dict_plot['idx'], 0].set_title(dict_plot['metric'], fontsize=20)
+        axes[dict_plot['idx'], 0].imshow(
+            data[:,:,round(resolution[2]/2)].T,
+            cmap='gray',
+            origin='lower',
+            interpolation='nearest',
+            vmin=dict_plot['vmin'],
+            vmax=dict_plot['vmax']
+        )
+        
+        # coronal
+        axes[dict_plot['idx'], 1].imshow(
+            data[:,round(resolution[1]/2),:].T,
+            cmap='gray',
+            origin='lower',
+            interpolation='nearest',
+            vmin=dict_plot['vmin'],
+            vmax=dict_plot['vmax']
+        )
+            
+        # sagittal
+        axes[dict_plot['idx'], 2].imshow(
+            data[round(resolution[0]/2)+5,:,:].T,
+            cmap='gray',
+            origin='lower',
+            interpolation='nearest',
+            vmin=dict_plot['vmin'],
+            vmax=dict_plot['vmax']
+        )
+    
+    # Adjust the spacing and save the png
+    plt.subplots_adjust(wspace=0.1, hspace=0.1)
+
+    if Path(path_png).parent.exists() == False:
+        subprocess.run(['mkdir', '-p', Path(path_png).parent])
+
+    fig.savefig(path_png, bbox_inches='tight')
+    plt.close('all')
+

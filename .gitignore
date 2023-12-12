@@ -1,3 +1,5 @@
+models/*/runs
+
 # Data
 data/databank_dti/quality_assurance/
 data/subject_info/clean/
