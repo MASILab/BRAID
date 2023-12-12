@@ -21,6 +21,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 if __name__ == "__main__":  
     device = torch.device('cuda')
+    PNG_GENERATED = False
     
     # User input: yaml file of the training configuration
     parser = argparse.ArgumentParser()
@@ -121,14 +122,15 @@ if __name__ == "__main__":
             for i, (images, label_feature, age) in enumerate(tqdm(dataloader_train)):
                 images, label_feature, age = images.to(device, non_blocking=True), label_feature.to(device, non_blocking=True), age.to(device, non_blocking=True)
                 
-                if (i+1) % 100 == 0:
+                if (i+1) % 400 == 0:
                     gc.collect()
                     torch.cuda.empty_cache()
-                    if config['output']['png_sanity_check'] != '':
+                    if (config['output']['png_sanity_check'] != '') and (PNG_GENERATED == False):
                         generate_png_during_training(
                             img_tensor = images[0,:,:,:,:].cpu(), 
-                            path_png = Path(config['output']['png_sanity_check']) / f"fold-{fold_idx}_epoch-{epoch}_batch-{i}_age-{age[0].cpu().numpy():.1f}.png"
+                            path_png = Path(config['output']['png_sanity_check']) / f"age-{age[0].cpu().numpy():.1f}.png"
                         )
+                        PNG_GENERATED = True
                             
                 with torch.autocast('cuda'):
                     output = model(images, label_feature)
