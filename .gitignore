@@ -1,4 +1,5 @@
 models/*/runs
+models/*/sanity_check
 
 # Data
 data/databank_dti/quality_assurance/
