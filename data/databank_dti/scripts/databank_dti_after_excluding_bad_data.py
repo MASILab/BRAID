@@ -14,12 +14,21 @@ Date: Dec 6, 2023
 
 import pandas as pd
 from pathlib import Path
-from tqdm import tqdm
 from braid.utls import summarize_dataset
 
 # All subject info for reference
 df_master = pd.read_csv('/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti.csv')
 df_master = df_master.loc[df_master['age'].notnull(), ]
+
+# Print out databank summary
+print('\n============Summary of the databank before any QA============')
+print('------------Overall------------')
+summarize_dataset(df_master.copy())
+
+for dataset in df_master['dataset'].unique():
+    print(f"------------{dataset}------------")
+    summarize_dataset(df_master.loc[df_master['dataset'] == dataset, ].copy())
+
 
 list_all_datasets = df_master['dataset'].unique()
 
@@ -81,11 +90,11 @@ df_png = pd.DataFrame({'dataset': list_df_dataset,
                        'age': list_df_age,
                        'control_label': list_df_control_label})
 
-df_png.to_csv('/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/quality_assurance/databank_dti_after_pngqa.csv', index=False)
+# df_png.to_csv('/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/quality_assurance/databank_dti_after_pngqa.csv', index=False)
 
 # Print out databank summary
 df_png = pd.read_csv('/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/quality_assurance/databank_dti_after_pngqa.csv')
-print('============Summary of the databank after the PNG QA============')
+print('\n============Summary of the databank after the PNG QA============')
 print('------------Overall------------')
 summarize_dataset(df_png.copy())
 
@@ -132,11 +141,11 @@ for i, row in df_png.iterrows():
                                  & (df_adsp_whitelist['session'] == row['session'])].shape[0] == 0:
             print(f"\tdropped {row['dataset']} {row['subject']} {row['session']} scan-{row['scan']}")
             df_png.drop(index=i, inplace=True)
-df_png.to_csv('/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/quality_assurance/databank_dti_after_pngqa_after_adspqa.csv', index=False)
+# df_png.to_csv('/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/quality_assurance/databank_dti_after_pngqa_after_adspqa.csv', index=False)
 
 # Print out databank summary
 df_png = pd.read_csv('/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/quality_assurance/databank_dti_after_pngqa_after_adspqa.csv')
-print('============Summary of the databank after the PNG QA AND the ADSP QA============')
+print('\n============Summary of the databank after the PNG QA AND the ADSP QA============')
 print('------------Overall------------')
 summarize_dataset(df_png.copy())
 
