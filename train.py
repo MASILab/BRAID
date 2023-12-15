@@ -119,7 +119,7 @@ if __name__ == "__main__":
             model.train()
             epoch_loss = 0.0
             optimizer.zero_grad()
-            for i, (images, label_feature, age) in enumerate(tqdm(dataloader_train)):
+            for i, (images, label_feature, age, _) in enumerate(tqdm(dataloader_train)):
                 images, label_feature, age = images.to(device, non_blocking=True), label_feature.to(device, non_blocking=True), age.to(device, non_blocking=True)
                 
                 if (i+1) % 400 == 0:
@@ -152,7 +152,7 @@ if __name__ == "__main__":
             model.eval()
             val_loss = 0.0
             with torch.no_grad():
-                for images, label_feature, age in tqdm(dataloader_val):
+                for images, label_feature, age, _ in tqdm(dataloader_val):
                     images, label_feature, age = images.to(device, non_blocking=True), label_feature.to(device, non_blocking=True), age.to(device, non_blocking=True)
 
                     output = model(images, label_feature)

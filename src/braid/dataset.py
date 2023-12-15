@@ -80,18 +80,19 @@ class BRAID_Dataset(Dataset):
         columns_to_check = ['dataset', 'subject', 'session', 'scan', 'sex', 'race_simple', 'age', 'control_label', 'dataset_subject']
         for col in columns_to_check:
             if col not in self.df.columns: raise ValueError(f"Column '{col}' not found in csv file")
+        self.df['scan_id'] = self.df['dataset_subject'] + '_' + self.df['session'] + '_' + 'scan-' + self.df['scan'].astype(str)
 
         if mode not in ['train', 'test']: raise ValueError("mode must be either 'train' or 'test'")
 
         if type(subjects) == str:
             if subjects == 'all': 
-                self.df = self.df.loc[(self.df['age'] >= self.age_min) & (self.df['age'] <= self.age_max), ]
+                self.df = self.df.loc[(self.df['age'] >= self.age_min) & (self.df['age'] < self.age_max), ]
             else:
                 raise ValueError("subjects must be either 'all' or a list/array of subjects")
         else:
             if not '_' in subjects[0]: raise ValueError("subject format must be 'dataset_subject'")
             self.df = self.df.loc[(self.df['age'] >= self.age_min) &
-                                  (self.df['age'] <= self.age_max) &
+                                  (self.df['age'] < self.age_max) &
                                   (self.df['dataset_subject'].isin(self.subjects)), ]
 
         if mode == 'train':
@@ -103,12 +104,18 @@ class BRAID_Dataset(Dataset):
     def __getitem__(self, idx):
         if self.mode == 'train':
             while True:
-                age_start = random.choices(range(self.age_min, self.age_max), k=1)[0]
+                age_start = random.choice(range(self.age_min, self.age_max))
                 age_end = age_start + 1
-                samples = self.df.loc[(self.df['age'] >= age_start) & (self.df['age'] <= age_end), ]
+                age_range_mask = (self.df['age'] >= age_start) & (self.df['age'] < age_end)
+
+                samples = self.df.loc[age_range_mask, ]
                 if samples.shape[0] >= 1:
                     break
             row = samples.sample(n=1, weights='sample_weight').iloc[0]
+            # decay probability (Normalization for preventing vanishing weights)
+            self.df.loc[self.df['scan_id']==row['scan_id'], 'sample_weight'] *= 0.01  # smaller the factor, faster it takes to cover all samples
+            self.df.loc[age_range_mask, 'sample_weight'] = self.df.loc[age_range_mask, 'sample_weight'] / self.df.loc[age_range_mask, 'sample_weight'].sum()
+
         else:
             row = self.df.iloc[idx]
         
@@ -133,4 +140,4 @@ class BRAID_Dataset(Dataset):
                 
         age = torch.tensor(row['age'], dtype=torch.float32)
 
-        return images, label_feature, age
+        return images, label_feature, age, row['scan_id']
