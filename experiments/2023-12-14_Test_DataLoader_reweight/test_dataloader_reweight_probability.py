@@ -59,19 +59,20 @@ class BRAID_Dataset(Dataset):
     def __getitem__(self, idx):
         if self.mode == 'train':
             while True:
-                # age_start = random.choices(range(self.age_min, self.age_max), k=1)[0]
                 age_start = random.choice(range(self.age_min, self.age_max))
                 age_end = age_start + 1
-                samples = self.df.loc[(self.df['age'] >= age_start) & (self.df['age'] < age_end), ]
+                age_range_mask = (self.df['age'] >= age_start) & (self.df['age'] < age_end)
+
+                samples = self.df.loc[age_range_mask, ]
                 if samples.shape[0] >= 1:
                     break
             row = samples.sample(n=1, weights='sample_weight').iloc[0]
             
-            # update sample_weight (this will make the dataloading slower, but it's necessary)
+            # decay posibility of being sampled, normalize the age bin to sum to 1 (to prevent extreme small values == 0)
             self.df.loc[(self.df['dataset_subject']==row['dataset_subject']) &
                         (self.df['session']==row['session']) &
                         (self.df['scan']==row['scan']), 'sample_weight'] *= 0.01  # smaller factor, faster to cover all samples
-            self.df['sample_weight'] = self.df['sample_weight'] / self.df['sample_weight'].sum()  # prevent extreme small values == 0
+            self.df.loc[age_range_mask, 'sample_weight'] = self.df.loc[age_range_mask, 'sample_weight'] / self.df.loc[age_range_mask, 'sample_weight'].sum()
 
         else:
             row = self.df.iloc[idx]
