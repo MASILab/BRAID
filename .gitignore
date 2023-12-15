@@ -1,3 +1,7 @@
+experiments/*/figs
+
+*.pth
+
 models/*/runs
 models/*/sanity_check
 
