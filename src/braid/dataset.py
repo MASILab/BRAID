@@ -14,7 +14,7 @@ from monai.transforms import (
     Spacingd, 
     ToTensord,
     ConcatItemsd,
-    )
+)
 
 
 def vectorize_sex_race(
@@ -196,9 +196,12 @@ def get_the_sequence_of_scans(
 
                 list_scans_epoch.append(row['scan_id'])
             list_scans.append(list_scans_epoch)
-    else:
+    elif mode == 'test':
         print('Generating the sequence of scans for testing...')
         list_scans = df['scan_id'].tolist()
+
+    else:
+        raise ValueError("mode must be either 'train' or 'test'")
     
     return list_scans
 
@@ -250,7 +253,7 @@ class BRAID_Dataset(Dataset):
         label_feature = vectorize_sex_race(row['sex'], row['race_simple'])
         age = torch.tensor(row['age'], dtype=torch.float32)
 
-        return images, label_feature, age, row['scan_id']
+        return images, label_feature, age
 
 
 def get_BRAID_dataloader(

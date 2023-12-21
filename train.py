@@ -29,7 +29,8 @@ if __name__ == "__main__":
     parser.add_argument("--yaml", type=str, help="Path to yaml file, example: ./models/2023-12-11_ResNet50/train_config.yaml")
     with open(parser.parse_args().yaml, 'r') as f:
         config = yaml.safe_load(f)
-    
+
+    # Train the model for each fold
     for fold_idx in config['model']['fold']:
         
         # subjects splitting (train/val)
@@ -41,7 +42,7 @@ if __name__ == "__main__":
             print(f"Fold-{fold_idx} does not have valid subjects splitting.")
             continue
         
-        # dataloader
+        # generate the sequence of samples (uniformly-distributed for training)
         list_scans_train = get_the_sequence_of_scans(
             csv_file = config['dataset']['csv_file'],
             subjects = subjects_train,
@@ -58,28 +59,21 @@ if __name__ == "__main__":
             mode = 'test',
             epochs = None,
         )
-        dataloader_train = get_BRAID_dataloader(
-            dataset_root = config['dataset']['root'],
-            csv_file = config['dataset']['csv_file'],
-            list_scans = list_scans_train,    
-            batch_size = config['optimization']['batch_size'],
-            ) 
         dataloader_val = get_BRAID_dataloader(
             dataset_root = config['dataset']['root'],
             csv_file = config['dataset']['csv_file'],
             list_scans = list_scans_val,
             batch_size = config['optimization']['batch_size'],
         )
-        num_batches_per_epoch = round(len(dataloader_train)/config['optimization']['epochs'])  # we flatten all "epochs" into one huge "epoch"
 
-        # Model
+        # model
         model = get_the_resnet_model(
             model_name = config['model']['name'], 
             feature_vector_length = config['model']['feature_vector_length'], 
             MLP_hidden_layer_sizes = config['model']['mlp_hidden_layer_sizes']
-            ).to(device, non_blocking=True)
+        ).to(device, non_blocking=True)
         
-        # Optimizer
+        # optimizer
         if config['optimization']['optimizer']['name'] == 'Adam':
             optimizer = torch.optim.Adam(
                 model.parameters(),
@@ -88,12 +82,13 @@ if __name__ == "__main__":
         else:
             raise ValueError("Optimizer not supported yet.")
         
-        # Learning rate scheduler
+        # learning rate scheduler
         if config['optimization']['lr_scheduler']['name'] == 'OneCycleLR':
             scheduler = torch.optim.lr_scheduler.OneCycleLR(
                 optimizer = optimizer,
                 max_lr = config['optimization']['lr_scheduler']['lr_max'],
-                total_steps= round(len(dataloader_train) / config['optimization']['batch_size_mimic_factor']),
+                epochs = len(list_scans_train),
+                steps_per_epoch = math.ceil(len(list_scans_train[0])/(config['optimization']['batch_size']*config['optimization']['batch_size_mimic_factor'])),
                 cycle_momentum = config['optimization']['lr_scheduler']['cycle_momentum'],
             )
         else:
@@ -108,80 +103,84 @@ if __name__ == "__main__":
         # Tensorboard and model weights saving
         writer = SummaryWriter(log_dir = (Path(config['output']['tensorboard']) / f"{config['model']['name']}_fold-{fold_idx}"))
         best_val_loss = float('inf')
+
         weights_local_dir = Path(config['output']['weights_local_dir']) / f"fold-{fold_idx}"
         weights_server_dir = Path(config['output']['weights_server_dir']) / f"fold-{fold_idx}"
         subprocess.run(['mkdir', '-p', weights_local_dir])
         subprocess.run(['mkdir', '-p', weights_server_dir])
 
         print(f"Training fold-{fold_idx} of model {config['model']['name']}...")
-        model.train()
-        epoch_loss = 0.0
-        optimizer.zero_grad()
-
-        for i, (images, label_feature, age, _) in enumerate(tqdm(dataloader_train)):
-            images, label_feature, age = images.to(device, non_blocking=True), label_feature.to(device, non_blocking=True), age.to(device, non_blocking=True)
-                        
-            with torch.autocast('cuda'):
-                output = model(images, label_feature)
-                loss = loss_fn(output, age.view(-1, 1))
-                epoch_loss += loss.detach()
-
-            loss /= config['optimization']['batch_size_mimic_factor']
-            loss.backward()
-
-            if (i+1) % config['optimization']['batch_size_mimic_factor'] == 0 or (i+1) == len(dataloader_train):
-                optimizer.step()
-                optimizer.zero_grad()
-                scheduler.step()
+        
+        for epoch in range(len(list_scans_train)):
             
-            # End of one "epoch"
-            if (i+1) % num_batches_per_epoch == 0 or (i+1) == len(dataloader_train):
-                epoch = math.ceil((i+1) / num_batches_per_epoch)
-                print(f"Epoch {epoch} finished. Start validation...")
-                
-                epoch_loss = epoch_loss / num_batches_per_epoch
-                writer.add_scalar('Train/Loss', epoch_loss, epoch)
-                
-                # validation
-                model.eval()
-                torch.cuda.empty_cache()
-                val_loss = 0.0
-                with torch.no_grad():
-                    for images, label_feature, age, _ in tqdm(dataloader_val):
-                        images, label_feature, age = images.to(device, non_blocking=True), label_feature.to(device, non_blocking=True), age.to(device, non_blocking=True)
+            # epoch-specific dataloader
+            dataloader_train = get_BRAID_dataloader(
+                dataset_root = config['dataset']['root'],
+                csv_file = config['dataset']['csv_file'],
+                list_scans = list_scans_train[epoch],
+                batch_size = config['optimization']['batch_size'],
+            )
 
-                        output = model(images, label_feature)                        
-                        val_loss += loss_fn(output, age.view(-1, 1)).detach()
+            # training
+            print(f"\nEpoch: {epoch+1}\nTraining phase:")
+            model.train()
+            epoch_loss = 0.0        
+            optimizer.zero_grad()
 
-                val_loss = val_loss / len(dataloader_val)
-                writer.add_scalar('Val/Loss', val_loss, epoch)
+            for i, (images, label_feature, age) in tqdm(enumerate(dataloader_train), total=len(dataloader_train)):
+                images, label_feature, age = images.to(device, non_blocking=True), label_feature.to(device, non_blocking=True), age.to(device, non_blocking=True)
+                        
+                with torch.autocast('cuda'):
+                    output = model(images, label_feature)
+                    loss = loss_fn(output, age.view(-1, 1))
+                    epoch_loss += loss.detach()
 
-                print(f"Epoch: {epoch}\tCurrent LR: {scheduler.get_last_lr()}\tTrain Loss: {epoch_loss}\tValidation Loss: {val_loss}")
+                loss /= config['optimization']['batch_size_mimic_factor']
+                loss.backward()
+
+                if (i+1) % config['optimization']['batch_size_mimic_factor'] == 0 or (i+1) == len(dataloader_train):
+                    optimizer.step()
+                    optimizer.zero_grad()
+                    scheduler.step()
+            
+            epoch_loss /= len(dataloader_train)
+            writer.add_scalar('Train/Loss', epoch_loss, epoch)
+
+            # QC PNG generation & garbage collection
+            if (config['output']['png_sanity_check'] != '') and (PNG_GENERATED == False):
+                generate_png_during_training(
+                    img_tensor = images[0,:,:,:,:].cpu(), 
+                    path_png = Path(config['output']['png_sanity_check']) / f"age-{age[0].cpu().numpy():.1f}.png"
+                )
+                print(f"Generated PNG for sanity check at {config['output']['png_sanity_check']}")
+                PNG_GENERATED = True
+            gc.collect()
+            torch.cuda.empty_cache()
+
+            # validation
+            print("Validation phase:")
+            model.eval()
+            val_loss = 0.0
+
+            with torch.no_grad():
+                for images, label_feature, age in tqdm(dataloader_val):
+                    images, label_feature, age = images.to(device, non_blocking=True), label_feature.to(device, non_blocking=True), age.to(device, non_blocking=True)
+
+                    output = model(images, label_feature)                        
+                    val_loss += loss_fn(output, age.view(-1, 1)).detach()
+
+                val_loss /= len(dataloader_val)
+            writer.add_scalar('Val/Loss', val_loss, epoch)
+            print(f"Current LR: {scheduler.get_last_lr()}\tTrain Loss: {epoch_loss}\tValidation Loss: {val_loss}")
+
+            # save improved model to local
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
                 
-                # save improved model to local
-                if val_loss < best_val_loss:
-                    best_val_loss = val_loss
-                    
-                    path_pth_local = weights_local_dir / f"{config['model']['name']}_fold-{fold_idx}_epoch-{epoch}_valloss-{best_val_loss:.4f}.pth"
-                    torch.save(model.state_dict(), path_pth_local)
-                    print(f'Saved improved model to {path_pth_local} at epoch {epoch} with validation loss {best_val_loss}\n')
+                path_pth_local = weights_local_dir / f"{config['model']['name']}_fold-{fold_idx}_epoch-{epoch}_valloss-{best_val_loss:.4f}.pth"
+                torch.save(model.state_dict(), path_pth_local)
+                print(f'Saved improved model to {path_pth_local} at epoch {epoch} with validation loss {best_val_loss}')
                 
-                # generate QC PNG
-                if (config['output']['png_sanity_check'] != '') and (PNG_GENERATED == False):
-                    generate_png_during_training(
-                        img_tensor = images[0,:,:,:,:].cpu(), 
-                        path_png = Path(config['output']['png_sanity_check']) / f"age-{age[0].cpu().numpy():.1f}.png"
-                    )
-                    PNG_GENERATED = True
-
-                # clear up RAM
-                gc.collect()
-                torch.cuda.empty_cache()
-                
-                model.train()
-                epoch_loss = 0.0
-                optimizer.zero_grad()
-
         path_pth_server = weights_server_dir / f"{config['model']['name']}_fold-{fold_idx}_epoch-{epoch}_valloss-{best_val_loss:.4f}.pth"
         print(f"Copying best model of fold-{fold_idx} to {path_pth_server}\n")
         subprocess.run(['cp', path_pth_local, path_pth_server])
