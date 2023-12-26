@@ -18,8 +18,9 @@ from braid.dataset import get_the_sequence_of_scans, get_BRAID_dataloader
 from braid.models import get_the_resnet_model
 from braid.utls import generate_png_during_training
 from torch.utils.tensorboard import SummaryWriter
-
+torch.set_flush_denormal(True)
 device = torch.device('cuda')
+
 PNG_GENERATED = False
 
 if __name__ == "__main__":  
@@ -144,7 +145,7 @@ if __name__ == "__main__":
                     scheduler.step()
             
             epoch_loss /= len(dataloader_train)
-            writer.add_scalar('Train/Loss', epoch_loss, epoch)
+            writer.add_scalar('Train/Loss', epoch_loss, (epoch+1))
 
             # QC PNG generation & garbage collection
             if (config['output']['png_sanity_check'] != '') and (PNG_GENERATED == False):
@@ -170,18 +171,19 @@ if __name__ == "__main__":
                     val_loss += loss_fn(output, age.view(-1, 1)).detach()
 
                 val_loss /= len(dataloader_val)
-            writer.add_scalar('Val/Loss', val_loss, epoch)
+            writer.add_scalar('Val/Loss', val_loss, (epoch+1))
             print(f"Current LR: {scheduler.get_last_lr()}\tTrain Loss: {epoch_loss}\tValidation Loss: {val_loss}")
+            torch.cuda.empty_cache()
 
             # save improved model to local
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 
-                path_pth_local = weights_local_dir / f"{config['model']['name']}_fold-{fold_idx}_epoch-{epoch}_valloss-{best_val_loss:.4f}.pth"
+                path_pth_local = weights_local_dir / f"{config['model']['name']}_fold-{fold_idx}_epoch-{epoch+1}_valloss-{best_val_loss:.4f}.pth"
                 torch.save(model.state_dict(), path_pth_local)
-                print(f'Saved improved model to {path_pth_local} at epoch {epoch} with validation loss {best_val_loss}')
+                print(f'Saved improved model to {path_pth_local} at epoch {epoch+1} with validation loss {best_val_loss}')
                 
-        path_pth_server = weights_server_dir / f"{config['model']['name']}_fold-{fold_idx}_epoch-{epoch}_valloss-{best_val_loss:.4f}.pth"
+        path_pth_server = weights_server_dir / path_pth_local.name
         print(f"Copying best model of fold-{fold_idx} to {path_pth_server}\n")
         subprocess.run(['cp', path_pth_local, path_pth_server])
         

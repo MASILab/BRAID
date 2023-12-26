@@ -228,7 +228,17 @@ class BRAID_Dataset(Dataset):
         self.df = pd.read_csv(csv_file)
         self.df['scan_id'] = self.df['dataset_subject'] + '_' + self.df['session'] + '_' + 'scan-' + self.df['scan'].astype(str)
         self.list_scans = flatten_the_list(list_scans)
-    
+        
+        self.transform = Compose([
+            LoadImaged(keys=['fa', 'md'], image_only=False),
+            EnsureChannelFirstd(keys=['fa', 'md']),
+            Orientationd(keys=['fa', 'md'], axcodes="RAS"),
+            CenterSpatialCropd(keys=['fa', 'md'], roi_size=(192, 228, 192)),
+            Spacingd(keys=['fa', 'md'], pixdim=(1.5, 1.5, 1.5), mode=('bilinear', 'bilinear')),  # expected: 128 x 152 x 128, 1.5mm^3
+            ToTensord(keys=['fa', 'md']),
+            ConcatItemsd(keys=['fa', 'md'], name='images')  
+        ])
+        
     def __len__(self):
         return len(self.list_scans)
     
@@ -238,16 +248,7 @@ class BRAID_Dataset(Dataset):
         fa = self.dataset_root / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'fa_skullstrip_MNI152.nii.gz'
         md = self.dataset_root / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'md_skullstrip_MNI152.nii.gz'
         data_dict = {'fa': fa, 'md': md}
-        transform = Compose([
-            LoadImaged(keys=['fa', 'md'], image_only=False),
-            EnsureChannelFirstd(keys=['fa', 'md']),
-            Orientationd(keys=['fa', 'md'], axcodes="RAS"),
-            CenterSpatialCropd(keys=['fa', 'md'], roi_size=(192, 228, 192)),
-            Spacingd(keys=['fa', 'md'], pixdim=(1.5, 1.5, 1.5), mode=('bilinear', 'bilinear')),  # expected: 128 x 152 x 128, 1.5mm^3
-            ToTensord(keys=['fa', 'md']),
-            ConcatItemsd(keys=['fa', 'md'], name='images')  
-        ])
-        data_dict = transform(data_dict)
+        data_dict = self.transform(data_dict)
         images = data_dict['images']
         
         label_feature = vectorize_sex_race(row['sex'], row['race_simple'])
