@@ -5,6 +5,7 @@ Author: Chenyu Gao
 Date: Jan 11, 2024
 """
 
+import gc
 import yaml
 import argparse
 import torch
@@ -25,27 +26,32 @@ if __name__ == "__main__":
     with open(parser.parse_args().yaml, 'r') as f:
         config = yaml.safe_load(f)
     
-    # Test dataset/loader
-    df = pd.read_csv(config['dataset']['csv_file'])
-    
-    list_scans_test = get_the_sequence_of_scans(
-        csv_file = config['dataset']['csv_file'],
-        subjects = 'all',
-        age_min = config['dataset']['age_min'],
-        age_max = config['dataset']['age_max'],
-        mode = 'test'
-    )
-    
-    dataloader_test = get_BRAID_dataloader(
-        dataset_root = config['dataset']['root'],
-        csv_file = config['dataset']['csv_file'],
-        list_scans = list_scans_test,
-        batch_size = config['batch_size']
-    )
-    
     # Test model from each fold
     for fold_idx in config['model']['fold']:
-        print(f'Fold-{fold_idx}:')
+        save_output_csv = Path(config['output_dir']) / f'predicted_age_fold-{fold_idx}.csv'
+        print(f'Start testing model from fold-{fold_idx}.\nOutput will be saved to: {save_output_csv}')
+        if save_output_csv.is_file():
+            print(f'Output file already exists, skip fold-{fold_idx}.')
+            continue
+        
+        # dataloader
+        df = pd.read_csv(config['dataset']['csv_file'])
+        
+        list_scans_test = get_the_sequence_of_scans(
+            csv_file = config['dataset']['csv_file'],
+            subjects = 'all',
+            age_min = config['dataset']['age_min'],
+            age_max = config['dataset']['age_max'],
+            mode = 'test'
+        )
+        
+        dataloader_test = get_BRAID_dataloader(
+            dataset_root = config['dataset']['root'],
+            csv_file = config['dataset']['csv_file'],
+            list_scans = list_scans_test,
+            batch_size = config['batch_size']
+        )
+
         # load model
         weights_folder = Path(config['model']['weights_root']) / f'fold-{fold_idx}'
         path_pth = [fn for fn in weights_folder.iterdir() if fn.suffix == '.pth'][0]
@@ -62,6 +68,8 @@ if __name__ == "__main__":
         list_gt_all = []
         list_pred_all = []
         
+        gc.collect()
+        torch.cuda.empty_cache()
         model.eval()
         with torch.no_grad():
             for images, label_feature, age in tqdm(dataloader_test):
@@ -74,9 +82,8 @@ if __name__ == "__main__":
                 list_pred_all += torch.flatten(pred).tolist()
         
         # Save predictions to csv
-        df.insert(0, "age_gt", list_gt_all)
-        df.insert(1, "age_pred", list_pred_all)
-        
-        save_csv = Path(config['output_dir']) / f'predicted_age_fold-{fold_idx}.csv'
-        subprocess.run(['mkdir', '-p', str(save_csv.parent)])
-        df.to_csv(save_csv, index=False)
+        df['age_gt'] = list_gt_all
+        df['age_pred'] = list_pred_all
+         
+        subprocess.run(['mkdir', '-p', str(save_output_csv.parent)])
+        df.to_csv(save_output_csv, index=False)

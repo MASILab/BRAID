@@ -1,0 +1,16 @@
+model:
+  name: 'resnet152'
+  mlp_hidden_layer_sizes: []
+  feature_vector_length: 6
+  fold: [1,2,3,4,5]
+  weights_root: '/nfs/masi/gaoc11/projects/BRAID/models/2023-12-27_ResNet152/weights'
+  
+dataset:
+  root: '/tmp/.GoneAfterReboot/braid_dataset'
+  csv_file: '/tmp/.GoneAfterReboot/spreadsheet/braid_test.csv'
+  age_min: 0
+  age_max: 999
+
+batch_size: 8
+
+output_dir: '/nfs/masi/gaoc11/projects/BRAID/models/2023-12-27_ResNet152/predictions/'
