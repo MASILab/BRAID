@@ -1,7 +1,10 @@
+import pdb
 import torch
 import subprocess
 import pandas as pd
 import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
 from pathlib import Path, PosixPath
 from braid.models import get_the_resnet_model
 
@@ -196,6 +199,7 @@ class AgePredictionEvaluator():
         self,
         databank_csv: str | PosixPath,
         save_png: str | PosixPath,
+        display_all_ages: bool = False,
     ):
         df_databank = pd.read_csv(databank_csv)
         df = self.df.copy()
@@ -206,7 +210,130 @@ class AgePredictionEvaluator():
             (df_databank['subject'] == row['subject']) &
             ((df_databank['session'] == row['session']) | (df_databank['session'].isnull())),
             'diagnosis_simple'].values[0], axis=1)
-        df.to_csv('test.csv')
+
+        # prepare data for bland-altman plot
+        df['age_diff'] = df['age_pred'] - df['age_gt']
+        df['testing set'] = np.where(df['dataset'] == 'ICBM', 'external', 'internal')
+        data_healthy = df.loc[df['control_label']==1, ]
+        data_patient = df.loc[(df['diagnosis'] != 'normal') & (df['diagnosis'].notnull()), ]
+
+        # plot settings
+        figsize = (6.5, 3.5)
+        marker_size = 5
+        marker_linewidth = 0
+        alpha = {
+            'scatter_marker_outside': 0.2,
+            'scatter_marker_inside': 1,
+            'kde': 0.8,
+        }
+
+        title_names = ['healthy', 'patient']
+        fontfamily = 'Ubuntu Condensed'
+        fontsize = {'title': 9, 'label': 11, 'ticks': 11, 'legend': 9}
+        
+        sns.set_palette("deep")  #TODO: consider change the color palette
+
+        fig, axes = plt.subplots(nrows=1, ncols=2, figsize=figsize, sharex=True, sharey=True)
+
+        # healthy
+        age_mask = (data_healthy['age_gt'] >= 45) & (data_healthy['age_gt'] < 90)
+        age_mask_inv = ~age_mask
+        if display_all_ages:
+            sns.scatterplot(
+                data=data_healthy.loc[age_mask_inv, ],
+                x='age_gt',
+                y='age_diff',
+                s=marker_size,
+                linewidth=marker_linewidth,
+                color="tab:gray",
+                alpha=alpha['scatter_marker_outside'],
+                ax=axes[0]
+            )
+        sns.scatterplot(
+            data=data_healthy.loc[age_mask, ],
+            x='age_gt',
+            y='age_diff',
+            s=marker_size,
+            hue='testing set',
+            linewidth=marker_linewidth,
+            ax=axes[0]
+        )
+        sns.kdeplot(
+            data=data_healthy.loc[age_mask, ],
+            x='age_gt',
+            y='age_diff',
+            hue='testing set',
+            fill=True,
+            levels=10,
+            cut=1,
+            alpha=alpha['kde'],
+            ax=axes[0]
+        )
+
+        # patient
+        age_mask = (data_patient['age_gt'] >= 45) & (data_patient['age_gt'] < 90)
+        age_mask_inv = ~age_mask
+        if display_all_ages:
+            sns.scatterplot(
+                data=data_patient.loc[age_mask_inv, ],
+                x='age_gt',
+                y='age_diff',
+                s=marker_size,
+                color="tab:gray",
+                alpha=alpha['scatter_marker_outside'],
+                linewidth=marker_linewidth,
+                ax=axes[1]
+            )
+        sns.scatterplot(
+            data=data_patient.loc[age_mask, ],
+            x='age_gt',
+            y='age_diff',
+            s=marker_size,
+            hue='testing set',
+            linewidth=marker_linewidth,
+            ax=axes[1]
+        )
+        # TODO: kde params
+        sns.kdeplot(
+            data=data_patient.loc[age_mask, ],
+            x='age_gt',
+            y='age_diff',
+            hue='testing set',
+            fill=True,
+            levels=10,
+            cut=0,
+            alpha=alpha['kde'],
+            ax=axes[1]
+        )
+
+        # global adjustments
+        for i in range(2):
+            axes[i].axhline(y=0, linestyle='-',linewidth=1, color='k', alpha=0.25)
+            axes[i].axvline(x=45, linestyle='--',linewidth=1, color='k', alpha=0.25)
+            axes[i].axvline(x=90, linestyle='--',linewidth=1, color='k', alpha=0.25, label='age range used for training')
+            axes[i].legend(prop={'size': fontsize['legend'], 'family': fontfamily})
+
+            axes[i].set_xlabel('chronological age (years)', fontsize=fontsize['label'], fontname=fontfamily)
+            axes[i].set_ylabel('predicted age - chronological age (years)', fontsize=fontsize['label'], fontname=fontfamily)
+        
+            axes[i].text(0.05, 0.95, 
+                        title_names[i], 
+                        fontsize=fontsize['title'],
+                        fontfamily=fontfamily,
+                        transform=axes[i].transAxes,
+                        verticalalignment='top', 
+                        bbox=dict(facecolor='white', alpha=0.5, edgecolor='black'))
+            
+            axes[i].tick_params(axis='both', direction='out', length=2)
+            axes[i].set_xlim(25, 110)
+            axes[i].set_ylim(-25, 25)
+            axes[i].set_xticks([30, 45, 60, 75, 90, 105])
+            axes[i].set_yticks([-15, -10, -5, 0, 5, 10, 15])
+
+        fig.subplots_adjust(hspace=0,wspace=0.1)
+        fig.savefig(save_png,
+                    dpi=600,
+                    bbox_inches='tight')
 
 # scan-rescan reproducibility
 # bland-altman plot
@@ -214,7 +341,8 @@ class AgePredictionEvaluator():
 
 evaluator = AgePredictionEvaluator(prediction_csv='models/2023-12-22_ResNet101/predictions/predicted_age_fold-1.csv')
 evaluator.generate_bland_altman_plot(databank_csv='/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti.csv',
-                                     save_png='test.png')
+                                     save_png='test.png',
+                                     display_all_ages=True)
 
 """
 '/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti.csv'
