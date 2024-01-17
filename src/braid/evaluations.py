@@ -213,7 +213,7 @@ class AgePredictionEvaluator():
 
         # prepare data for bland-altman plot
         df['age_diff'] = df['age_pred'] - df['age_gt']
-        df['testing set'] = np.where(df['dataset'] == 'ICBM', 'external', 'internal')
+        df['testing set'] = np.where(df['dataset'] == 'ICBM', 'external dataset', 'internal dataset')
         data_healthy = df.loc[df['control_label']==1, ]
         data_patient = df.loc[(df['diagnosis'] != 'normal') & (df['diagnosis'].notnull()), ]
 
@@ -231,8 +231,7 @@ class AgePredictionEvaluator():
         fontfamily = 'Ubuntu Condensed'
         fontsize = {'title': 9, 'label': 11, 'ticks': 11, 'legend': 9}
         
-        sns.set_palette("deep")  #TODO: consider change the color palette
-
+        sns.set_palette("tab10")
         fig, axes = plt.subplots(nrows=1, ncols=2, figsize=figsize, sharex=True, sharey=True)
 
         # healthy
@@ -293,7 +292,6 @@ class AgePredictionEvaluator():
             linewidth=marker_linewidth,
             ax=axes[1]
         )
-        # TODO: kde params
         sns.kdeplot(
             data=data_patient.loc[age_mask, ],
             x='age_gt',
@@ -301,7 +299,7 @@ class AgePredictionEvaluator():
             hue='testing set',
             fill=True,
             levels=10,
-            cut=0,
+            cut=1,
             alpha=alpha['kde'],
             ax=axes[1]
         )
@@ -335,29 +333,87 @@ class AgePredictionEvaluator():
                     dpi=600,
                     bbox_inches='tight')
 
+    def prepare_dataframe_for_scan_rescan_reproducibility_test(
+        self,
+        databank_csv: str | PosixPath,
+        age_min: int = 45,
+        age_max: int = 90,
+        cross_sectional: bool = True,
+        save_csv: str | PosixPath | None = None,
+    ):
+        """
+        Prepare a dataframe for scan-rescan reproducibility test.
+        Should contain columns:
+            dataset, subject, session, diagnosis, predicted_age_first_scan, predicted_age_second_scan, predicted_age_diff 
+        """
+        df = self.df.copy()
+        df = df.loc[(df['age_gt'] >= age_min) & (df['age_gt'] < age_max), ]
+        
+        # retrieve the diagnosis information
+        df_databank = pd.read_csv(databank_csv)
+        df['diagnosis'] = df.apply(lambda row: df_databank.loc[
+            (df_databank['dataset'] == row['dataset']) &
+            (df_databank['subject'] == row['subject']) &
+            ((df_databank['session'] == row['session']) | (df_databank['session'].isnull())),
+            'diagnosis_simple'].values[0], axis=1)
+        
+        # collecting values for the new dataframe
+        list_df_dataset = []
+        list_df_subject = []
+        list_df_session = []
+        list_df_diagnosis = []
+        list_df_predicted_age_first_scan = []
+        list_df_predicted_age_second_scan = []
+        list_df_predicted_age_diff = []
+        list_df_predicted_age_diff_abs = []
+
+        df['ds_session'] = df['dataset'] + '_' + df['subject'] + '_' + df['session']
+        for ds_session in df['ds_session'].unique():
+            predicted_ages = df.loc[df['ds_session']==ds_session, 'age_pred'].values
+            if len(predicted_ages) < 2:
+                continue
+            
+            list_df_dataset.append(df.loc[df['ds_session']==ds_session, 'dataset'].values[0])
+            list_df_subject.append(df.loc[df['ds_session']==ds_session, 'subject'].values[0])
+            list_df_session.append(df.loc[df['ds_session']==ds_session, 'session'].values[0])
+            list_df_diagnosis.append(df.loc[df['ds_session']==ds_session, 'diagnosis'].values[0])
+            list_df_predicted_age_first_scan.append(predicted_ages[0])
+            list_df_predicted_age_second_scan.append(predicted_ages[1])
+            list_df_predicted_age_diff.append(predicted_ages[1] - predicted_ages[0])
+            list_df_predicted_age_diff_abs.append(abs(predicted_ages[1] - predicted_ages[0]))
+        
+        d = {
+            'dataset': list_df_dataset,
+            'subject': list_df_subject,
+            'session': list_df_session,
+            'diagnosis': list_df_diagnosis,
+            'predicted_age_first_scan': list_df_predicted_age_first_scan,
+            'predicted_age_second_scan': list_df_predicted_age_second_scan,
+            'predicted_age_diff': list_df_predicted_age_diff,
+            'predicted_age_diff_abs': list_df_predicted_age_diff_abs,
+        }
+        df = pd.DataFrame(data = d)
+        
+        if cross_sectional:
+            df = df.loc[df.groupby('subject')['predicted_age_diff_abs'].idxmin()]  # consider how it will introduce bias
+            
+        if save_csv is not None:
+            subprocess.run(['mkdir', '-p', str(Path(save_csv).parent)])
+            df.to_csv(save_csv, index=False)
+        return df
+    
+    def generate_scan_rescan_raincloud_plot(
+        self,
+        dataframe,
+        save_png: str | PosixPath,
+    ):
+        pass
 # scan-rescan reproducibility
-# bland-altman plot
 # cognitive score correlation
 
 evaluator = AgePredictionEvaluator(prediction_csv='models/2023-12-22_ResNet101/predictions/predicted_age_fold-1.csv')
-evaluator.generate_bland_altman_plot(databank_csv='/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti.csv',
-                                     save_png='test.png',
-                                     display_all_ages=True)
-
-"""
-'/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti.csv'
-'diagnosis_simple'
-    'normal': 'normal', 
-    'Patient': 'patient', 
-    'LMCI': 'MCI', 
-    'impaired (not MCI)': 'patient',
-    'No Cognitive Impairment': 'normal', 
-    'dementia': 'dementia', 
-    "Alzheimer's Dementia": 'dementia', 
-    'CN': 'normal', 
-    'MCI': 'MCI', 
-    'EMCI': 'MCI', 
-    'AD': 'dementia', 
-    'Mild Cognitive Impairment': 'MCI', 
-    'SMC': 'patient',
-"""
+evaluator.prepare_dataframe_for_scan_rescan_reproducibility_test(
+    databank_csv='/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti.csv',
+    cross_sectional=True,
+    save_csv='test.csv'
+)
