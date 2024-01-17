@@ -400,20 +400,100 @@ class AgePredictionEvaluator():
         if save_csv is not None:
             subprocess.run(['mkdir', '-p', str(Path(save_csv).parent)])
             df.to_csv(save_csv, index=False)
+
         return df
     
     def generate_scan_rescan_raincloud_plot(
         self,
-        dataframe,
         save_png: str | PosixPath,
+        databank_csv: str | PosixPath,
+        age_min: int = 45,
+        age_max: int = 90,
+        cross_sectional: bool = True,
     ):
-        pass
+        df = self.prepare_dataframe_for_scan_rescan_reproducibility_test(databank_csv, age_min, age_max, cross_sectional)
+        df['group'] = df['diagnosis'].apply(lambda x: 'normal' if x == 'normal' else 'patient' if pd.notnull(x) else None)        
+
+        # plot settings
+        figsize = (4, 3)
+        dpi = 300
+        fontfamily = 'Ubuntu Condensed'
+        fontsize = {'title': 9, 'label': 11, 'ticks': 11, 'legend': 9}
+        bw_adjust = 0.5
+        marker_size = 2
+        jitter = 0.2 # strip plot
+        strip_shift = 0.25
+        alpha_scatter = 0.5
+        sns.set_style('white')
+        fig, ax = plt.subplots(ncols=1, nrows=1, figsize=figsize)
+
+        # Violin plot
+        ax = sns.violinplot(
+            data = df,
+            x = 'group',
+            y = 'predicted_age_diff_abs',
+            order = ['normal', 'patient'],
+            cut=0,
+            density_norm='area',
+            width=0.5,
+            inner=None,
+            bw_adjust=bw_adjust,
+            color='#396ef7',
+            saturation=1,
+            linewidth=0,
+            ax=ax,
+        )
+        
+        # Clip the right half of each violin.
+        for item in ax.collections:
+            x0, y0, width, height = item.get_paths()[0].get_extents().bounds
+            item.set_clip_path(plt.Rectangle((x0, y0), width/2, height, transform=ax.transData))
+    
+        # Create strip plots
+        num_items = len(ax.collections)
+        ax = sns.stripplot(
+            data = df,
+            x = 'group',
+            y = 'predicted_age_diff_abs',
+            order = ['normal', 'patient'],
+            jitter = jitter,
+            alpha = alpha_scatter,
+            color ='#396ef7',
+            size = marker_size,
+            ax = ax,
+        )
+        # Shift each strip plot strictly below the correponding volin.
+        for item in ax.collections[num_items:]:
+            item.set_offsets(item.get_offsets() + (strip_shift, 0))
+
+        # Create narrow boxplots on top of the corresponding violin and strip plots, with thick lines, the mean values, without the outliers.
+        ax = sns.boxplot(
+            data = df,
+            x = 'group',
+            y = 'predicted_age_diff_abs',
+            order = ['normal', 'patient'],
+            width = 0.08,
+            showfliers = False,
+            boxprops = dict(facecolor=(0,0,0,0),
+                            linewidth=1, zorder=2),
+            whiskerprops=dict(linewidth=1),
+            capprops=dict(linewidth=1),
+            medianprops=dict(color= '#ff8121', 
+                             linewidth=1.5),
+            ax = ax,
+        )
+
+        ax.grid(linestyle=':', linewidth=0.5)
+        ax.set_xlabel('')        
+        ax.set_ylabel('Scan-rescan absolute difference (years)', fontsize=fontsize['label'], fontname=fontfamily)
+        ax.tick_params(labelsize=fontsize['ticks'], labelfontfamily=fontfamily)
+        ax.set_ylim(bottom=0, top=8)
+        ax.set_yticks([0,1,2,3,4,5,6,7,8])
+        fig.savefig(save_png, dpi = dpi)
+
 # scan-rescan reproducibility
 # cognitive score correlation
 
 evaluator = AgePredictionEvaluator(prediction_csv='models/2023-12-22_ResNet101/predictions/predicted_age_fold-1.csv')
-evaluator.prepare_dataframe_for_scan_rescan_reproducibility_test(
-    databank_csv='/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti.csv',
-    cross_sectional=True,
-    save_csv='test.csv'
-)
+evaluator.generate_scan_rescan_raincloud_plot(dataframe=None, save_png='test_scan_rescan.png')
+    
