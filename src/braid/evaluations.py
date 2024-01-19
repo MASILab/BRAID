@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+import statsmodels.formula.api as smf
 from pathlib import Path, PosixPath
 from braid.models import get_the_resnet_model
 
@@ -228,7 +229,7 @@ class AgePredictionEvaluator():
         }
 
         title_names = ['healthy', 'patient']
-        fontfamily = 'Ubuntu Condensed'
+        fontfamily = 'DejaVu Sans'
         fontsize = {'title': 9, 'label': 11, 'ticks': 11, 'legend': 9}
         
         sns.set_palette("tab10")
@@ -417,7 +418,7 @@ class AgePredictionEvaluator():
         # plot settings
         figsize = (4, 3)
         dpi = 300
-        fontfamily = 'Ubuntu Condensed'
+        fontfamily = 'DejaVu Sans'
         fontsize = {'title': 9, 'label': 11, 'ticks': 11, 'legend': 9}
         bw_adjust = 0.5
         marker_size = 2
@@ -491,9 +492,153 @@ class AgePredictionEvaluator():
         ax.set_yticks([0,1,2,3,4,5,6,7,8])
         fig.savefig(save_png, dpi = dpi)
 
-# scan-rescan reproducibility
+    def merge_adni_cognitive_scores(
+        self,
+        csv_adni: str | PosixPath,
+        csv_output: str | PosixPath | None = None,
+    ):
+        """ Merge ADNI cognitive scores into the dataframe.
+        Will be used for linear mixed-effects models and spaghetti plots.
+        """
+        df = self.df.copy()
+        df = df.loc[(df['dataset']=='ADNI'), ]
+        
+        # retrieve cogtinive scores from ADNI
+        coginfo = pd.read_csv(csv_adni)
+        df['memory_score'] = df.apply(lambda x: coginfo.loc[(coginfo['subject']==x['subject']) & (coginfo['session']==x['session']), 'memory_score'].values[0], axis=1)        
+        df['executive_function_score'] = df.apply(lambda x: coginfo.loc[(coginfo['subject']==x['subject']) & (coginfo['session']==x['session']), 'executive_function_score'].values[0], axis=1)
+        df['language_score'] = df.apply(lambda x: coginfo.loc[(coginfo['subject']==x['subject']) & (coginfo['session']==x['session']), 'language_score'].values[0], axis=1)
+        df['visuospatial_score'] = df.apply(lambda x: coginfo.loc[(coginfo['subject']==x['subject']) & (coginfo['session']==x['session']), 'visuospatial_score'].values[0], axis=1)
+
+        if csv_output is not None:
+            subprocess.run(['mkdir', '-p', str(Path(csv_output).parent)])
+            df.to_csv(csv_output, index=False)
+        
+        return df
+    
+    def ADNI_cognitive_scores_fit_lme(
+        self,
+        csv_adni: str | PosixPath,
+        covariate: str,
+        outcome: str,
+        age_min: int = 45,
+        age_max: int = 90,
+        return_input: bool = True,
+    ):
+        """Fit linear mixed-effects models for ADNI cognitive scores.
+        """
+        # prepare data
+        if not covariate in ['age_gt', 'age_pred']:
+            raise ValueError("covariate must be either 'age_gt' or 'age_pred'")
+        if not outcome in ['memory_score', 'executive_function_score', 'language_score', 'visuospatial_score']:
+            raise ValueError("outcome must be either 'memory_score', 'executive_function_score', 'language_score', or 'visuospatial_score'")
+        
+        data = self.merge_adni_cognitive_scores(csv_adni)
+        data = data.loc[(data['age_gt'] >= age_min) & (data['age_gt'] < age_max), ]
+        data = data[['subject', 'session', 'scan', covariate, outcome]]
+        data = data.groupby(['subject', 'session']).mean().reset_index()
+        data = data[['subject', 'session', covariate, outcome]]
+        data.dropna(subset=[outcome], inplace=True)
+
+        # fit linear mixed-effects model
+        model = smf.mixedlm(f"{outcome} ~ {covariate}", data=data, groups=data["subject"])
+        results = model.fit(method=["lbfgs"])
+        
+        if return_input:
+            return results, data
+        else:
+            return results
+
+    def visualize_ADNI_cognitive_scores_spaghetti_lme(
+        self,
+        csv_adni: str | PosixPath,
+        save_png: str | PosixPath,
+    ):
+        """Generate spaghetti plots of ADNI cognitive scores with age.
+        Overlay the regression line and confidence interval from linear mixed-effects models.
+        """
+        
+        figsize = (6.5, 3.5)
+        dpi = 300
+        fontfamily = 'DejaVu Sans'
+        fontsize = {'title': 9, 'label': 9, 'ticks': 9, 'text': 9}
+        markersize = 4
+        linewidth = 1
+        color = {'spaghetti': 'tab:blue', 'regression': 'tab:red'}
+        alpha = {'spaghetti': 0.1, 'confidence': 0.25}
+        lookup_rename = {
+            'memory_score': 'memory score',
+            'executive_function_score': 'executive function score',
+            'language_score': 'language score',
+            'visuospatial_score': 'visuospatial score',
+            'age_pred': 'predicted age (years)',
+            'age_gt': 'chronological age (years)',
+        }
+
+        fig, axes = plt.subplots(nrows=2, ncols=4, figsize=figsize, sharex=True, sharey=True)
+        for idx_row, covariate in enumerate(['age_gt', 'age_pred']):
+            for idx_col, outcome in enumerate(['memory_score', 'executive_function_score', 'language_score', 'visuospatial_score']):
+                print(f"plotting {covariate} vs {outcome}...")
+
+                # linear mixed-effects model
+                results, data = self.ADNI_cognitive_scores_fit_lme(csv_adni, covariate, outcome, age_min=45, age_max=90)
+
+                # 95% confidence interval
+                se_intercept, se_slope = results.bse_fe['Intercept'], results.bse_fe[covariate]
+                coef_intercept, coef_slope = results.fe_params['Intercept'], results.fe_params[covariate]
+                pvalue_intercept, pvalue_slope = results.pvalues['Intercept'], results.pvalues[covariate]
+                
+                x = np.sort(data[covariate].values)
+                y_reg_mean = x*coef_slope + coef_intercept
+                y_reg_mean_se = np.sqrt(np.square(se_intercept) + np.square((x - np.mean(x))*se_slope))
+
+                ci_upper = y_reg_mean + 1.96*y_reg_mean_se
+                ci_lower = y_reg_mean - 1.96*y_reg_mean_se
+
+                # spaghetti plot
+                for subj in data['subject'].unique():
+                    df_subj = data.loc[data['subject']==subj, ].sort_values(by=covariate)
+                    axes[idx_row, idx_col].plot(df_subj[covariate], df_subj[outcome], '.-', color=color['spaghetti'], markersize=markersize, markeredgewidth=0, linewidth=linewidth, alpha=alpha['spaghetti'])
+                
+                # regression line + confidence intervals
+                axes[idx_row, idx_col].plot(x, y_reg_mean, color=color['regression'], label=f'β={coef_slope:.3f} p-value={pvalue_slope:.1e}')
+                axes[idx_row, idx_col].fill_between(x, ci_upper, ci_lower, color=color['regression'], alpha=alpha['confidence'], label='95% confidence interval')
+                
+                # text: β and p-value
+                axes[idx_row, idx_col].text(
+                    0.04, 0.02,
+                    f"β={coef_slope:.3f}",                
+                    transform=axes[idx_row, idx_col].transAxes,
+                    fontsize=fontsize['text'],
+                    fontfamily=fontfamily,
+                    verticalalignment='bottom', 
+                    horizontalalignment='left')
+                
+                if idx_row == 0:
+                    axes[idx_row, idx_col].set_title(lookup_rename[outcome].replace(' score', ''), fontsize=fontsize['title'], fontfamily=fontfamily)
+
+                if idx_col == 0:
+                    axes[idx_row, idx_col].set_ylabel('score', labelpad=0, fontsize=fontsize['label'], fontfamily=fontfamily)
+                
+                axes[idx_row, idx_col].tick_params(axis='both', which='both', direction='out', length=2, pad=2, labelsize=fontsize['ticks'], labelfontfamily=fontfamily)
+                
+        fig.text(0.5, 0.5, 'chronological age (years)', ha='center', va='center', fontsize=fontsize['label'], fontfamily=fontfamily)
+        fig.text(0.5, 0.04, 'predicted age (years)', ha='center', va='center', fontsize=fontsize['label'], fontfamily=fontfamily)
+
+        fig.subplots_adjust(hspace=0.2,wspace=0.05)
+        fig.savefig(save_png, dpi=dpi, bbox_inches='tight')
+
+    # def generate_age_gap_raincloud_plot(
+    #     self,
+    #     save_png: str | PosixPath,
+    # ):
+    #     pass
+
+# ICC
 # cognitive score correlation
 
-evaluator = AgePredictionEvaluator(prediction_csv='models/2023-12-22_ResNet101/predictions/predicted_age_fold-1.csv')
-evaluator.generate_scan_rescan_raincloud_plot(dataframe=None, save_png='test_scan_rescan.png')
-    
+evaluator = AgePredictionEvaluator(prediction_csv='models/2023-12-22_ResNet101/predictions/predicted_age_fold-3.csv')
+evaluator.visualize_ADNI_cognitive_scores_spaghetti_lme(
+        csv_adni = 'data/subject_info/clean/ADNI_info_w_approximate_cogn_scores.csv',
+        save_png = 'adni_plot.png',
+    )

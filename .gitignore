@@ -6,6 +6,7 @@ models/*/runs
 models/*/sanity_check
 
 # Data
+experiments/2024-01-17_Test_Mixed_Effects_Model_ADNI/test_prediction_adni_w_coginfo.csv
 data/databank_dti/quality_assurance/
 data/subject_info/clean/
 data/subject_info/raw/ABVIB/UDS_A1_SUBJECT_DEMOGRAPHICS_05Sep2023.csv
