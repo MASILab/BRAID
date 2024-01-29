@@ -1,6 +1,7 @@
 import subprocess
 import nibabel as nib
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import numpy as np
 from pathlib import Path
 
@@ -75,6 +76,7 @@ def generate_qa_screenshot_fa_md(path_fa, path_md, path_png, offset=0):
 
     fig.savefig(path_png, bbox_inches='tight')
     plt.close('all')
+
 
 def summarize_dataset(df):
     
@@ -180,3 +182,61 @@ def generate_png_during_training(img_tensor, path_png):
     fig.savefig(path_png, bbox_inches='tight')
     plt.close('all')
 
+
+def generate_qa_screenshot_t1w(path_t1w, path_png, offset=0):
+    
+    # load data and min-max normalization
+    img = nib.load(path_t1w)
+    data = np.squeeze(img.get_fdata())
+    resolution = data.shape[:3]
+    vmin = data.min()
+    vmax = data.max()
+    norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+    
+    fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(22, 7))
+    
+    # axial
+    aspect = img.header.get_zooms()[1] / img.header.get_zooms()[0]
+    im = axes[0].imshow(
+        data[:,:,round(resolution[2]/2)+offset].T,
+        cmap='gray',
+        origin='lower',
+        aspect=aspect,
+        interpolation='nearest',
+        norm=norm
+    )
+            
+    # coronal
+    aspect = img.header.get_zooms()[2] / img.header.get_zooms()[0]
+    axes[1].imshow(
+        data[:,round(resolution[1]/2)+offset,:].T,
+        cmap='gray',
+        origin='lower',
+        aspect=aspect,
+        interpolation='nearest',
+        norm=norm
+    )
+            
+    # sagittal
+    aspect = img.header.get_zooms()[2] / img.header.get_zooms()[1]
+    axes[2].imshow(
+        data[round(resolution[0]/2)+offset+5,:,:].T,
+        cmap='gray',
+        origin='lower',
+        aspect=aspect,
+        interpolation='nearest',
+        norm=norm
+    )
+    
+    # Colorbar
+    cbar_ax = fig.add_axes([0.65, 0.1, 0.25, 0.025]) # [left, bottom, width, height]
+    fig.colorbar(im, cax=cbar_ax, orientation='horizontal')
+    
+    # Adjust the spacing and save the png
+    plt.subplots_adjust(wspace=0.1, hspace=0.1)
+
+    if Path(path_png).parent.exists() == False:
+        subprocess.run(['mkdir', '-p', Path(path_png).parent])
+
+    fig.savefig(path_png, bbox_inches='tight')
+    plt.close('all')

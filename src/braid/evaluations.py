@@ -628,11 +628,6 @@ class AgePredictionEvaluator():
         fig.subplots_adjust(hspace=0.2,wspace=0.05)
         fig.savefig(save_png, dpi=dpi, bbox_inches='tight')
 
-    # def generate_age_gap_raincloud_plot(
-    #     self,
-    #     save_png: str | PosixPath,
-    # ):
-    #     pass
 
 # ICC
 # cognitive score correlation
