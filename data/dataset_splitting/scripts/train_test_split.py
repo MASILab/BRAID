@@ -112,26 +112,28 @@ for dataset in df_test['dataset'].unique():
     summarize_dataset(df_test.loc[df_test['dataset'] == dataset, ].copy())
 
 
-# # Data transfer
-# print(f'\nTransferring data to {path_braid_data}\n')
+# Data transfer
+print(f'\nTransferring data to {path_braid_data}\n')
 
-# df_all = pd.concat([df_train, df_test], ignore_index=True)
-# if df_all.shape[0] != df_qa.shape[0]:
-#     raise ValueError('The combined dataset does not have the same #rows as the original dataset.')
+df_all = pd.concat([df_train, df_test], ignore_index=True)
+if df_all.shape[0] != df_qa.shape[0]:
+    raise ValueError('The combined dataset does not have the same #rows as the original dataset.')
 
-# for _,row in tqdm(df_all.iterrows(), total=df_all.shape[0]):
-#     fa = path_databank_dti / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'final' / 'fa_skullstrip_MNI152.nii.gz'
-#     md = path_databank_dti / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'final' / 'md_skullstrip_MNI152.nii.gz'
+for _,row in tqdm(df_all.iterrows(), total=df_all.shape[0]):
+    fa = path_databank_dti / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'final' / 'fa_skullstrip_MNI152.nii.gz'
+    md = path_databank_dti / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'final' / 'md_skullstrip_MNI152.nii.gz'
     
-#     if not (fa.is_file() and md.is_file()):
-#         raise ValueError(f'The following files do not exist: {fa}, {md}')
+    if not (fa.is_file() and md.is_file()):
+        raise ValueError(f'The following files do not exist: {fa}, {md}')
     
-#     fa_dst = path_braid_data / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'fa_skullstrip_MNI152.nii.gz'
-#     md_dst = path_braid_data / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'md_skullstrip_MNI152.nii.gz'
+    fa_dst = path_braid_data / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'fa_skullstrip_MNI152.nii.gz'
+    md_dst = path_braid_data / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'md_skullstrip_MNI152.nii.gz'
     
-#     subprocess.run(['mkdir', '-p', str(fa_dst.parent)])
-#     subprocess.run(['rsync', '-a', str(fa), str(fa_dst)])
-#     subprocess.run(['rsync', '-a', str(md), str(md_dst)])
+    subprocess.run(['mkdir', '-p', str(fa_dst.parent)])
+    # subprocess.run(['rsync', '-a', str(fa), str(fa_dst)])
+    # subprocess.run(['rsync', '-a', str(md), str(md_dst)])
+    subprocess.run(['ln', '-s', str(fa), str(fa_dst)])
+    subprocess.run(['ln', '-s', str(md), str(md_dst)])
 
 # 5 Folds for cross validation
 subjects = df_train['dataset_subject'].unique()

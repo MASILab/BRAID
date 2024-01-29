@@ -19,7 +19,8 @@ def copy_t1w(path_databank_root, row):
         t1w_target = path_databank_root / dataset / subject / session / scan / f'{dataset}_{subject}_{session}_{scan}_T1w.nii.gz'
         
         subprocess.run(['mkdir', '-p', str(t1w_target.parent)])
-        subprocess.run(['rsync', '-L', str(t1w), str(t1w_target)])
+        subprocess.run(['ln', '-s', str(t1w), str(t1w_target)])  # avoid duplicated files
+        # subprocess.run(['rsync', '-L', str(t1w), str(t1w_target)])
     else:
         raise ValueError(f'Current script is not expecting suffix other than .nii.gz')
 
