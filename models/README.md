@@ -9,5 +9,6 @@ Timeline for model training:
 - 2023-12-27_ResNet152 Fold-1 **done**
 - 2023-12-22_ResNet101 Fold-2/3/4/5 **done**
 - 2023-12-27_ResNet152 Fold-2/3/4/5 **done**
-- 2023-12-21_ResNet50 Fold-2/3/4/5 **ETA: Jan 15**
-- 
+- 2023-12-21_ResNet50 Fold-2/3/4/5 **done**
+- 2024-01-16_ResNet101_MLP Fold-1/2/3/4/5  **done**
+- 2023-12-14_ResNet18 Fold-2/3/4/5 **done**
