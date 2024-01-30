@@ -127,52 +127,94 @@ def generate_png_during_training(img_tensor, path_png):
     """function for generating PNG for sanity check during model training.
 
     Args:
-        img_tensor (torch.tensor): torch tensor (on CPU) in (2, 128, 152, 128)
+        img_tensor (torch.tensor): torch tensor (on CPU) in (2, 128, 152, 128) or (1, 128, 152, 128)
         path_png (str): path to save the PNG 
     """
 
-    list_dict_plot = [
-        {'idx': 0, 'metric' : 'FA', 'vmax' : 1, 'vmin': 0},
-        {'idx': 1, 'metric' : 'MD', 'vmax' : 0.003, 'vmin': 0},
-        ]
+    if img_tensor.shape[0] == 2:
+        # DTI scalars
+        list_dict_plot = [
+            {'idx': 0, 'metric' : 'FA', 'vmax' : 1, 'vmin': 0},
+            {'idx': 1, 'metric' : 'MD', 'vmax' : 0.003, 'vmin': 0},
+            ]
+        
+        fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(24, 14))
     
-    fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(24, 14))
-    
-    for dict_plot in list_dict_plot:
-        data = img_tensor[dict_plot['idx'],:,:,:].numpy()
+        for dict_plot in list_dict_plot:
+            data = img_tensor[dict_plot['idx'],:,:,:].numpy()
+            resolution = data.shape[:3]
+            
+            # axial
+            axes[dict_plot['idx'], 0].set_title(dict_plot['metric'], fontsize=20)
+            axes[dict_plot['idx'], 0].imshow(
+                data[:,:,round(resolution[2]/2)].T,
+                cmap='gray',
+                origin='lower',
+                interpolation='nearest',
+                vmin=dict_plot['vmin'],
+                vmax=dict_plot['vmax']
+            )
+            
+            # coronal
+            axes[dict_plot['idx'], 1].imshow(
+                data[:,round(resolution[1]/2),:].T,
+                cmap='gray',
+                origin='lower',
+                interpolation='nearest',
+                vmin=dict_plot['vmin'],
+                vmax=dict_plot['vmax']
+            )
+                
+            # sagittal
+            axes[dict_plot['idx'], 2].imshow(
+                data[round(resolution[0]/2)+5,:,:].T,
+                cmap='gray',
+                origin='lower',
+                interpolation='nearest',
+                vmin=dict_plot['vmin'],
+                vmax=dict_plot['vmax']
+            )
+    elif img_tensor.shape[0] == 1:
+        # T1w
+        data = img_tensor[0,:,:,:].numpy()
         resolution = data.shape[:3]
+        vmin = data.min()
+        vmax = data.max()
+        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+        
+        fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(22, 7))
         
         # axial
-        axes[dict_plot['idx'], 0].set_title(dict_plot['metric'], fontsize=20)
-        axes[dict_plot['idx'], 0].imshow(
+        im = axes[0].imshow(
             data[:,:,round(resolution[2]/2)].T,
             cmap='gray',
             origin='lower',
             interpolation='nearest',
-            vmin=dict_plot['vmin'],
-            vmax=dict_plot['vmax']
+            norm=norm
         )
-        
+                
         # coronal
-        axes[dict_plot['idx'], 1].imshow(
+        axes[1].imshow(
             data[:,round(resolution[1]/2),:].T,
             cmap='gray',
             origin='lower',
             interpolation='nearest',
-            vmin=dict_plot['vmin'],
-            vmax=dict_plot['vmax']
+            norm=norm
         )
-            
+                
         # sagittal
-        axes[dict_plot['idx'], 2].imshow(
+        axes[2].imshow(
             data[round(resolution[0]/2)+5,:,:].T,
             cmap='gray',
             origin='lower',
             interpolation='nearest',
-            vmin=dict_plot['vmin'],
-            vmax=dict_plot['vmax']
+            norm=norm
         )
-    
+        
+        # Colorbar
+        cbar_ax = fig.add_axes([0.65, 0.1, 0.25, 0.025]) # [left, bottom, width, height]
+        fig.colorbar(im, cax=cbar_ax, orientation='horizontal')
+        
     # Adjust the spacing and save the png
     plt.subplots_adjust(wspace=0.1, hspace=0.1)
 

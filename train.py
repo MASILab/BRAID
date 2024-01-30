@@ -14,7 +14,7 @@ import subprocess
 import numpy as np
 from pathlib import Path
 from tqdm import tqdm
-from braid.dataset import get_the_sequence_of_scans, get_BRAID_dataloader
+from braid.dataset import get_the_sequence_of_scans, get_dataloader
 from braid.models import get_the_resnet_model
 from braid.utls import generate_png_during_training
 from torch.utils.tensorboard import SummaryWriter
@@ -60,7 +60,8 @@ if __name__ == "__main__":
             mode = 'test',
             epochs = None,
         )
-        dataloader_val = get_BRAID_dataloader(
+        dataloader_val = get_dataloader(
+            modality=config.get('modality', 'DTI'),
             dataset_root = config['dataset']['root'],
             csv_file = config['dataset']['csv_file'],
             list_scans = list_scans_val,
@@ -71,7 +72,8 @@ if __name__ == "__main__":
         model = get_the_resnet_model(
             model_name = config['model']['name'], 
             feature_vector_length = config['model']['feature_vector_length'], 
-            MLP_hidden_layer_sizes = config['model']['mlp_hidden_layer_sizes']
+            MLP_hidden_layer_sizes = config['model']['mlp_hidden_layer_sizes'],
+            n_input_channels=config['model']['n_input_channels'],
         ).to(device, non_blocking=True)
         
         # optimizer
@@ -115,7 +117,8 @@ if __name__ == "__main__":
         for epoch in range(len(list_scans_train)):
             
             # epoch-specific dataloader
-            dataloader_train = get_BRAID_dataloader(
+            dataloader_train = get_dataloader(
+                modality=config.get('modality', 'DTI'),
                 dataset_root = config['dataset']['root'],
                 csv_file = config['dataset']['csv_file'],
                 list_scans = list_scans_train[epoch],
@@ -128,11 +131,11 @@ if __name__ == "__main__":
             epoch_loss = 0.0        
             optimizer.zero_grad()
 
-            for i, (images, label_feature, age) in tqdm(enumerate(dataloader_train), total=len(dataloader_train)):
-                images, label_feature, age = images.to(device, non_blocking=True), label_feature.to(device, non_blocking=True), age.to(device, non_blocking=True)
-                        
+            for i, (image, label_feature, age) in tqdm(enumerate(dataloader_train), total=len(dataloader_train)):
+                image, label_feature, age = image.to(device, non_blocking=True), label_feature.to(device, non_blocking=True), age.to(device, non_blocking=True)
+                
                 with torch.autocast('cuda'):
-                    output = model(images, label_feature)
+                    output = model(image, label_feature)
                     loss = loss_fn(output, age.view(-1, 1))
                     epoch_loss += loss.detach()
 
@@ -150,7 +153,7 @@ if __name__ == "__main__":
             # QC PNG generation & garbage collection
             if (config['output']['png_sanity_check'] != '') and (PNG_GENERATED == False):
                 generate_png_during_training(
-                    img_tensor = images[0,:,:,:,:].cpu(), 
+                    img_tensor = image[0,:,:,:,:].cpu(), 
                     path_png = Path(config['output']['png_sanity_check']) / f"age-{age[0].cpu().numpy():.1f}.png"
                 )
                 print(f"Generated PNG for sanity check at {config['output']['png_sanity_check']}")
@@ -164,10 +167,10 @@ if __name__ == "__main__":
             val_loss = 0.0
 
             with torch.no_grad():
-                for images, label_feature, age in tqdm(dataloader_val):
-                    images, label_feature, age = images.to(device, non_blocking=True), label_feature.to(device, non_blocking=True), age.to(device, non_blocking=True)
+                for image, label_feature, age in tqdm(dataloader_val):
+                    image, label_feature, age = image.to(device, non_blocking=True), label_feature.to(device, non_blocking=True), age.to(device, non_blocking=True)
 
-                    output = model(images, label_feature)                        
+                    output = model(image, label_feature)                        
                     val_loss += loss_fn(output, age.view(-1, 1)).detach()
 
                 val_loss /= len(dataloader_val)

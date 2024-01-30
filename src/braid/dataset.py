@@ -14,6 +14,11 @@ from monai.transforms import (
     Spacingd, 
     ToTensord,
     ConcatItemsd,
+    LoadImage,
+    EnsureChannelFirst,
+    Orientation,
+    NormalizeIntensity,
+    ToTensor
 )
 
 
@@ -257,7 +262,44 @@ class BRAID_Dataset(Dataset):
         return images, label_feature, age
 
 
-def get_BRAID_dataloader(
+class T1wAge_Dataset(Dataset):
+    def __init__(
+        self,
+        dataset_root: str | PosixPath,
+        csv_file: str | PosixPath,
+        list_scans: list[str] | list[list[str]],
+    ) -> None:
+        
+        self.dataset_root = Path(dataset_root)
+        df = pd.read_csv(csv_file)
+        df['scan_id'] = df['dataset_subject'] + '_' + df['session'] + '_' + 'scan-' + df['scan'].astype(str)
+        self.df = df
+        self.list_scans = flatten_the_list(list_scans)
+        
+        self.transform = Compose([
+            LoadImage(reader="NibabelReader", image_only=True),
+            EnsureChannelFirst(),
+            Orientation(axcodes="RAS"),
+            NormalizeIntensity(nonzero=True),
+            ToTensor(),
+        ])
+        
+    def __len__(self):
+        return len(self.list_scans)
+    
+    def __getitem__(self, idx):
+        row = self.df.loc[self.df['scan_id']==self.list_scans[idx], ].iloc[0]
+        img = self.dataset_root / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / f"{row['dataset']}_{row['subject']}_{row['session']}_scan-{row['scan']}_T1w_MNI152_Warped_crop_downsample.nii.gz"
+        img = self.transform(img)
+        
+        label_feature = vectorize_sex_race(row['sex'], row['race_simple'])
+        age = torch.tensor(row['age'], dtype=torch.float32)
+
+        return img, label_feature, age
+
+
+def get_dataloader(
+    modality: str,
     dataset_root: str | PosixPath,
     csv_file: str | PosixPath,
     list_scans: list[str] | list[list[str]],    
@@ -268,7 +310,13 @@ def get_BRAID_dataloader(
     prefetch_factor: int = 2,
     ) -> DataLoader:
 
-    dataset = BRAID_Dataset(dataset_root, csv_file, list_scans)
+    if modality == 'DTI':
+        dataset = BRAID_Dataset(dataset_root, csv_file, list_scans)
+    elif modality == 'T1w':
+        dataset = T1wAge_Dataset(dataset_root, csv_file, list_scans)
+    else:
+        raise ValueError("modality must be either 'DTI' or 'T1w'")
+    
     dataloader = DataLoader(
         dataset, 
         batch_size = batch_size, 

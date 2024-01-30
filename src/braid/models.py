@@ -327,12 +327,12 @@ class ResNet(nn.Module):
         return x
 
 
-def get_the_resnet_model(model_name, feature_vector_length, MLP_hidden_layer_sizes):
+def get_the_resnet_model(model_name, feature_vector_length, MLP_hidden_layer_sizes, n_input_channels=2):
     if model_name == 'resnet10':
         model = ResNet(block=ResNetBlock,
                        layers=[1, 1, 1, 1],
                        block_inplanes=get_inplanes(),
-                       n_input_channels=2,
+                       n_input_channels=n_input_channels,
                        feature_vector_length=feature_vector_length,
                        MLP_hidden_layer_sizes=MLP_hidden_layer_sizes)
     
@@ -340,7 +340,7 @@ def get_the_resnet_model(model_name, feature_vector_length, MLP_hidden_layer_siz
         model = ResNet(block=ResNetBlock,
                        layers=[2, 2, 2, 2],
                        block_inplanes=get_inplanes(),
-                       n_input_channels=2,
+                       n_input_channels=n_input_channels,
                        feature_vector_length=feature_vector_length,
                        MLP_hidden_layer_sizes=MLP_hidden_layer_sizes)
         
@@ -348,7 +348,7 @@ def get_the_resnet_model(model_name, feature_vector_length, MLP_hidden_layer_siz
         model = ResNet(block=ResNetBlock,
                        layers=[3, 4, 6, 3],
                        block_inplanes=get_inplanes(),
-                       n_input_channels=2,
+                       n_input_channels=n_input_channels,
                        feature_vector_length=feature_vector_length,
                        MLP_hidden_layer_sizes=MLP_hidden_layer_sizes)
         
@@ -356,7 +356,7 @@ def get_the_resnet_model(model_name, feature_vector_length, MLP_hidden_layer_siz
         model = ResNet(block=ResNetBottleneck,
                        layers=[3, 4, 6, 3],
                        block_inplanes=get_inplanes(),
-                       n_input_channels=2,
+                       n_input_channels=n_input_channels,
                        feature_vector_length=feature_vector_length,
                        MLP_hidden_layer_sizes=MLP_hidden_layer_sizes)
     
@@ -364,7 +364,7 @@ def get_the_resnet_model(model_name, feature_vector_length, MLP_hidden_layer_siz
         model = ResNet(block=ResNetBottleneck,
                        layers=[3, 4, 23, 3],
                        block_inplanes=get_inplanes(),
-                       n_input_channels=2,
+                       n_input_channels=n_input_channels,
                        feature_vector_length=feature_vector_length,
                        MLP_hidden_layer_sizes=MLP_hidden_layer_sizes)
         
@@ -372,7 +372,7 @@ def get_the_resnet_model(model_name, feature_vector_length, MLP_hidden_layer_siz
         model = ResNet(block=ResNetBottleneck,
                        layers=[3, 8, 36, 3],
                        block_inplanes=get_inplanes(),
-                       n_input_channels=2,
+                       n_input_channels=n_input_channels,
                        feature_vector_length=feature_vector_length,
                        MLP_hidden_layer_sizes=MLP_hidden_layer_sizes)
     
@@ -380,7 +380,7 @@ def get_the_resnet_model(model_name, feature_vector_length, MLP_hidden_layer_siz
         model = ResNet(block=ResNetBottleneck,
                        layers=[3, 24, 36, 3],
                        block_inplanes=get_inplanes(),
-                       n_input_channels=2,
+                       n_input_channels=n_input_channels,
                        feature_vector_length=feature_vector_length,
                        MLP_hidden_layer_sizes=MLP_hidden_layer_sizes)
     
