@@ -1,3 +1,8 @@
+""" Extract data useful for training and testing from databank_t1w.
+Run this on hickory.
+"""
+
+
 import os
 import subprocess
 import pandas as pd
@@ -6,9 +11,9 @@ from tqdm import tqdm
 
 
 def set_up_traintestset_symlink(
-    databank_t1w_dir = '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/databank_t1w',
-    traintestset_dir = '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/T1wAgePredict',
-    suffix = '_T1w_MNI152_Warped.nii.gz'
+    databank_t1w_dir = '/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/databank_t1w',
+    traintestset_dir = '/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/T1wAgePredict',
+    suffix = '_T1w_MNI152_Warped_crop_downsample.nii.gz'
 ):
     
     for root, dirs, files in os.walk(databank_t1w_dir):
@@ -24,10 +29,10 @@ def set_up_traintestset_symlink(
 def train_test_split_following_braid(
     braid_train_csv,
     braid_test_csv,
-    databank_t1w,
+    databank_t1w_csv,
     t1wagepredict_train_csv,
     t1wagepredict_test_csv,
-    traintestset_dir = '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/T1wAgePredict',
+    traintestset_dir = '/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/T1wAgePredict',
     check_existence = True
 ):
     # subject-level train-test splitting of BRAID
@@ -37,7 +42,7 @@ def train_test_split_following_braid(
     dataset_subjects_test = braid_test['dataset_subject'].tolist()
     
     # use the same subject-level splitting for T1wAgePredict
-    df = pd.read_csv(databank_t1w)
+    df = pd.read_csv(databank_t1w_csv)
     df = df.loc[df['age'].notnull(), ]
     df['dataset_subject'] = df['dataset'] + '_' + df['subject']
     df['session'] = df['session'].fillna('ses-1')
@@ -48,7 +53,7 @@ def train_test_split_following_braid(
         data_root = Path(traintestset_dir)
         
         for i, row in tqdm(df.iterrows(), total=len(df.index), desc='Checking file existence'):
-            t1w = data_root / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / f"{row['dataset']}_{row['subject']}_{row['session']}_scan-{row['scan']}_T1w_MNI152_Warped.nii.gz"
+            t1w = data_root / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / f"{row['dataset']}_{row['subject']}_{row['session']}_scan-{row['scan']}_T1w_MNI152_Warped_crop_downsample.nii.gz"
             
             if not t1w.is_file():
                 print(f"File not found. drop from train/test sets: {t1w}")
@@ -68,9 +73,9 @@ if __name__ == "__main__":
     # set_up_traintestset_symlink()
     
     train_test_split_following_braid(
-        braid_train_csv='/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/braid_train.csv',
-        braid_test_csv='/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/braid_test.csv',
-        databank_t1w='/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_t1w.csv',
-        t1wagepredict_train_csv='/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/t1wagepredict_train.csv',
-        t1wagepredict_test_csv='/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/t1wagepredict_test.csv',
+        braid_train_csv='/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/braid_train.csv',
+        braid_test_csv='/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/braid_test.csv',
+        databank_t1w_csv='/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_t1w.csv',
+        t1wagepredict_train_csv='/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/t1wagepredict_train.csv',
+        t1wagepredict_test_csv='/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/t1wagepredict_test.csv',
     )
