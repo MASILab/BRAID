@@ -2,14 +2,32 @@
 # we have 12 datasets that have all files required for the final preprocessing step.
 # Now we skull-strip FA, MD images, and then transform them to MNI152 space.
 # 
+# Run on hickory.
+# 
 # Author: Chenyu Gao
 # Date: Nov 30, 2023
 
-import braid.calculate_dti_scalars
-import braid.registrations
+import subprocess
+# import braid.calculate_dti_scalars
+# import braid.registrations
 from pathlib import Path
 from multiprocessing import Pool
 from tqdm import tqdm
+
+
+def apply_skull_strip_mask(path_input, path_mask, path_output):
+    """Apply a binary brain mask to an input image. The input and the mask should be in the same space.
+    We assume the binary mask is 0 for background, and 1 for brain, and there is no other value in the mask.
+
+    Args:
+        path_input (str): Path to the input image
+        path_mask (str): Path to the brain mask
+        path_output (str): Path to save the output image
+    """
+    
+    command = ['fslmaths', str(path_input), '-mul', str(path_mask), str(path_output)]
+    subprocess.run(command)
+
 
 def skull_stripping(job_tuple):
     """wrapper for a single job of skull stripping
@@ -24,9 +42,32 @@ def skull_stripping(job_tuple):
         return
     
     if Path(fa).is_file() and Path(md).is_file() and Path(brain_mask_b0).is_file():
-        braid.calculate_dti_scalars.apply_skull_strip_mask(fa, brain_mask_b0, fa_ss)
-        braid.calculate_dti_scalars.apply_skull_strip_mask(md, brain_mask_b0, md_ss)
-    
+        apply_skull_strip_mask(fa, brain_mask_b0, fa_ss)
+        apply_skull_strip_mask(md, brain_mask_b0, md_ss)
+
+
+def apply_transform_to_img_in_b0(path_img_b0, path_img_ref, path_img_out, list_transforms):
+    """
+    Apply transformations to image in b0 space. This will align the image to the MNI152 standard template.
+    path_img_b0: path to the image in b0 space
+    path_img_ref: path to the reference image (MNI152 template image)
+    path_img_out: path to the output image
+    list_transforms: list of paths to the transformations
+    """
+    if not Path(path_img_out).parent.is_dir():
+        subprocess.run(['mkdir', '-p', str(Path(path_img_out).parent)])
+    command = [
+        'antsApplyTransforms', '-d', '3',
+        '-i', str(path_img_b0),
+        '-r', str(path_img_ref), 
+        '-o', str(path_img_out), 
+        '-n', 'Linear', 
+        ]
+    for transform in list_transforms:
+        command += ['-t', str(transform)]
+        
+    subprocess.run(command)
+
 
 def apply_transforms(job_tuple):
     
@@ -51,13 +92,13 @@ def apply_transforms(job_tuple):
     
     # Affine transformed
     list_transforms = [transform_t1toMNI_affine, transform_b0tot1]
-    braid.registrations.apply_transform_to_img_in_b0(fa_ss, path_MNI152, fa_ss_mni_affine, list_transforms)
-    braid.registrations.apply_transform_to_img_in_b0(md_ss, path_MNI152, md_ss_mni_affine, list_transforms)
+    apply_transform_to_img_in_b0(fa_ss, path_MNI152, fa_ss_mni_affine, list_transforms)
+    apply_transform_to_img_in_b0(md_ss, path_MNI152, md_ss_mni_affine, list_transforms)
     
     # Non-linear warped
     list_transforms = [transform_t1toMNI_warp, transform_t1toMNI_affine, transform_b0tot1]
-    braid.registrations.apply_transform_to_img_in_b0(fa_ss, path_MNI152, fa_ss_mni_warp, list_transforms)
-    braid.registrations.apply_transform_to_img_in_b0(md_ss, path_MNI152, md_ss_mni_warp, list_transforms)
+    apply_transform_to_img_in_b0(fa_ss, path_MNI152, fa_ss_mni_warp, list_transforms)
+    apply_transform_to_img_in_b0(md_ss, path_MNI152, md_ss_mni_warp, list_transforms)
 
 
 def generate_job_tuples(path_databank_root):
@@ -104,7 +145,7 @@ def generate_job_tuples(path_databank_root):
 if __name__ == "__main__":
     path_MNI152 = '/nfs2/ForChenyu/MNI_152.nii.gz'
     
-    dict_jobs = generate_job_tuples(path_databank_root='/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/databank_dti')
+    dict_jobs = generate_job_tuples(path_databank_root='/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/databank_dti')
     
     with Pool(processes=8) as pool:
         list(tqdm(pool.imap(skull_stripping, dict_jobs["skull_stripping"], chunksize=1), total=len(dict_jobs["skull_stripping"]), desc='Skull stripping'))
