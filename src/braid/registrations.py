@@ -51,23 +51,25 @@ def register_b0_to_MNI152(path_b0, path_t1, path_t1_brain, path_MNI152, outdir):
     subprocess.run(['rm', '-r', str(temp_folder)])
 
 
-def apply_transform_to_img_in_b0(path_img_b0, path_img_ref, path_img_out, path_transform_b0_to_t1, path_transform_t1_to_MNI152):
+def apply_transform_to_img_in_b0(path_img_b0, path_img_ref, path_img_out, list_transforms):
     """
     Apply transformations to image in b0 space. This will align the image to the MNI152 standard template.
     path_img_b0: path to the image in b0 space
     path_img_ref: path to the reference image (MNI152 template image)
     path_img_out: path to the output image
-    path_transform_b0_to_t1: path to the transformation from b0 to T1w (example: transform_b0tot1.txt)
-    path_transform_t1_to_MNI152: path to the transformation from T1w to MNI152 (example: transform_t1toMNI_affine.mat)
+    list_transforms: list of paths to the transformations
     """
     if not Path(path_img_out).parent.is_dir():
         subprocess.run(['mkdir', '-p', str(Path(path_img_out).parent)])
-
-    command = ['antsApplyTransforms', '-d', '3', 
-               '-i', str(path_img_b0), 
-               '-r', str(path_img_ref), 
-               '-o', str(path_img_out), 
-               '-n', 'Linear', 
-               '-t', str(path_transform_t1_to_MNI152), '-t', str(path_transform_b0_to_t1)]
+    command = [
+        'antsApplyTransforms', '-d', '3',
+        '-i', str(path_img_b0),
+        '-r', str(path_img_ref), 
+        '-o', str(path_img_out), 
+        '-n', 'Linear', 
+        ]
+    for transform in list_transforms:
+        command += ['-t', str(transform)]
+        
     subprocess.run(command)
 
