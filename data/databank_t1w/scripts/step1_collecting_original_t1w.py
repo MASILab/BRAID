@@ -12,15 +12,11 @@ def collect(tuple):
     t1w, t1w_target, t1w_seg, t1w_seg_target = tuple
     subprocess.run(['mkdir', '-p', str(t1w_target.parent)])
 
-    try:
+    if Path(t1w).is_file():
         subprocess.run(['ln', '-s', str(t1w), str(t1w_target)])
-    except:
-        print(f'Error: {t1w_target} -> {t1w}')
     
-    try:
+    if Path(t1w_seg).is_file():
         subprocess.run(['ln', '-s', str(t1w_seg), str(t1w_seg_target)])
-    except:
-        print(f'Error: {t1w_seg_target} -> {t1w_seg}')
         
         
 def generate_collector_tuples(
