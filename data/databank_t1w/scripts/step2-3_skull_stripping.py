@@ -60,43 +60,57 @@ def skull_strip(tuple):
     synthstrip_wrapper='/nobackup/p_masi/gaoc11/synthstrip-singularity'
     # >
 
-    # create tmp dir
+    # file paths
     t1w, t1w_seg = tuple
     tmp_dir = Path(tmp_root) / t1w.split('/')[-1].replace('.nii.gz', '')
+    tmp_t1w = tmp_dir / t1w.split('/')[-1]
+    tmp_t1w_seg = tmp_dir / t1w_seg.split('/')[-1] if t1w_seg is not None else None
+    tmp_brain = tmp_dir / t1w.split('/')[-1].replace('_T1w.nii.gz', '_T1w_brain.nii.gz')
+    tmp_brain_mask = tmp_dir / t1w.split('/')[-1].replace('_T1w.nii.gz', '_T1w_brain_mask.nii.gz')
+    
+    # create tmp dir
     subprocess.run(['mkdir', '-p', tmp_dir])
+    
     log = tmp_dir / 'log.txt'
-
     with open(log, 'a') as f:
         # transfer files to nobackup
-        tmp_t1w = tmp_dir / t1w.split('/')[-1]
         subprocess.run(['scp', f"{server}:{t1w}", tmp_t1w], stdout=f, stderr=f)
+        if not Path(tmp_t1w).is_file():
+            return  # if t1w transfer failed, skip the rest of the process
         if t1w_seg is not None:
-            tmp_t1w_seg = tmp_dir / t1w_seg.split('/')[-1]
             subprocess.run(['scp', f"{server}:{t1w_seg}", tmp_t1w_seg], stdout=f, stderr=f)
-
+        
         # skull strip
-        if Path(tmp_t1w).is_file():
-            tmp_brain = tmp_dir / t1w.split('/')[-1].replace('_T1w.nii.gz', '_T1w_brain.nii.gz')
-            tmp_brain_mask = tmp_dir / t1w.split('/')[-1].replace('_T1w.nii.gz', '_T1w_brain_mask.nii.gz')
+        if tmp_t1w_seg is not None:
             if Path(tmp_t1w_seg).is_file():
                 subprocess.run(['fslmaths', tmp_t1w_seg, '-div', tmp_t1w_seg, tmp_brain_mask], stdout=f, stderr=f)
                 subprocess.run(['fslmaths', tmp_t1w, '-mul', tmp_brain_mask, tmp_brain], stdout=f, stderr=f)
-            else:
-                subprocess.run([synthstrip_wrapper, '-i', tmp_t1w, '-o', tmp_brain, '-m', tmp_brain_mask], stdout=f, stderr=f)
+        else:
+            subprocess.run([synthstrip_wrapper, '-i', tmp_t1w, '-o', tmp_brain, '-m', tmp_brain_mask], stdout=f, stderr=f)
 
-            # transfer files back to server
-            subprocess.run(['scp', tmp_brain, f"{server}:{t1w.replace('_T1w.nii.gz', '_T1w_brain.nii.gz')}"], stdout=f, stderr=f)
-            subprocess.run(['scp', tmp_brain_mask, f"{server}:{t1w.replace('_T1w.nii.gz', '_T1w_brain_mask.nii.gz')}"], stdout=f, stderr=f)
+        # transfer files back to server
+        subprocess.run(['scp', tmp_brain, f"{server}:{t1w.replace('_T1w.nii.gz', '_T1w_brain.nii.gz')}"], stdout=f, stderr=f)
+        subprocess.run(['scp', tmp_brain_mask, f"{server}:{t1w.replace('_T1w.nii.gz', '_T1w_brain_mask.nii.gz')}"], stdout=f, stderr=f)
 
     # remove tmp dir
     subprocess.run(['rm', '-rf', tmp_dir])    
 
 if __name__ == '__main__':
-    for dataset in ['ICBM', 'NACC', 'OASIS3', 'OASIS4', 'ROSMAPMARS', 'UKBB', 'VMAP', 'WRAP', 'ADNI', 'BIOCARD', 'BLSA', 'HCPA']:
+    for dataset in ['HCPA', 'NACC', 'OASIS3', 'OASIS4', 'ROSMAPMARS', 'UKBB', 'VMAP', 'WRAP', 'ADNI', 'BIOCARD', 'BLSA', 'ICBM']:
         list_job_tuples = generate_job_tuples(
             databank_root = f'/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/databank_t1w/{dataset}/',
             server='hickory',
         )
 
-        with Pool(processes=96) as pool:
-            list(tqdm(pool.imap(skull_strip, list_job_tuples, chunksize=1), total=len(list_job_tuples), desc=f'skull strip {dataset}'))
+        ct_missing_slant = 0
+        for _, t1w_seg in list_job_tuples:
+            if t1w_seg is None:
+                ct_missing_slant += 1
+
+        if ct_missing_slant >= 8:
+            num_workers = 4  # because synthstrip singularity costs too much
+        else:
+            num_workers = 32
+
+        with Pool(processes=num_workers) as pool:
+            list(tqdm(pool.imap(skull_strip, list_job_tuples, chunksize=1), total=len(list_job_tuples), desc=f'skull strip {dataset} with {num_workers} workers'))
