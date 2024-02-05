@@ -48,7 +48,10 @@ def create_jobs(databank_root, suffix, n, seed, qa_root, qa_csv):
         
         for t1w in list_t1w_sample:
             path_png = qa_root / dataset.name / t1w.split('/')[-1].replace('.nii.gz', '.png')
-            list_job_tuples.append((t1w, path_png))
+            if path_png.is_file():
+                continue
+            else:
+                list_job_tuples.append((t1w, path_png))
     
     # save the selected samples to csv
     d = {'t1w': list_df_t1w}
