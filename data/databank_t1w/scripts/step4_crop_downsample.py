@@ -17,7 +17,7 @@ from monai.transforms import (
 )
 torch.set_flush_denormal(True)
 
-def list_t1w_mni152(root_dir, suffix='_T1w_MNI152_Warped.nii.gz'):
+def list_t1w_mni152(root_dir, suffix):
     
     list_t1w = []
     for root, dirs, files in os.walk(root_dir):
@@ -30,11 +30,7 @@ def list_t1w_mni152(root_dir, suffix='_T1w_MNI152_Warped.nii.gz'):
 
 
 class Preprocessing_Dataset(Dataset):
-    def __init__(
-        self,
-        list_t1w: list[str] | list[PosixPath],
-        data_root_dir: str | PosixPath,
-    ) -> None:
+    def __init__(self, list_t1w, data_root_dir):
         
         self.list_t1w = list_t1w
         self.transform = Compose([
@@ -66,13 +62,13 @@ if __name__ == "__main__":
     list_datasets = [fd for fd in databank_t1w.iterdir() if fd.is_dir()]
     
     for dataset_dir in list_datasets:
-        if dataset_dir.name in ['UKBB']:
+        if dataset_dir.name in []:
             print(f'Manually skip {dataset_dir.name}')
             continue
 
         list_t1w = list_t1w_mni152(
             root_dir=dataset_dir, 
-            suffix='_T1w_MNI152_Warped.nii.gz'
+            suffix='_T1w_brain_MNI152_Warped.nii.gz'
             )
         
         dataset = Preprocessing_Dataset(
@@ -89,4 +85,4 @@ if __name__ == "__main__":
             prefetch_factor = 2,
         )
 
-        list(tqdm(dataloader, total=len(dataloader), desc='Crop and downsample T1w in MNI152'))
+        list(tqdm(dataloader, total=len(dataloader), desc=f'Crop and downsample T1w {dataset_dir.name}'))
