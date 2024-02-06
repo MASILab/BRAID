@@ -10,7 +10,10 @@ from tqdm import tqdm
 
 def take_screenshots(tuple_job):
     fa, md, png = tuple_job
-    braid.utls.generate_qa_screenshot_fa_md(fa, md, png, offset=0)
+    try:
+        braid.utls.generate_qa_screenshot_fa_md(fa, md, png, offset=0)
+    except:
+        print(f"failed to generate screenshots:\n{fa}\n{md}\n")
 
 def generate_job_tuples(
     databank_root,
@@ -44,6 +47,9 @@ def generate_job_tuples(
                     
                     # outputs
                     png = screenshots_root / dataset.name / "{}_{}_{}.png".format(subject.name, session.name, scan.name)
+                    if png.is_file():
+                        continue
+
                     list_job_tuples.append((fa, md, png))
     
     return list_job_tuples    
@@ -57,5 +63,5 @@ if __name__ == '__main__':
     list_job_tuples = generate_job_tuples(databank_root, screenshots_root, suffix)
     print(f"{len(list_job_tuples)} PNGs to plot\nAssign them to parallel painters...")
 
-    with Pool(processes=4) as pool:
+    with Pool(processes=8) as pool:
         list(tqdm(pool.imap(take_screenshots, list_job_tuples, chunksize=1), total=len(list_job_tuples)))
