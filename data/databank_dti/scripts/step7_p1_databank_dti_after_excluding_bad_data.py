@@ -1,8 +1,9 @@
-"""
-We performed a QA on the PNG images and deleted the PNG images that show bad FA and MD images.
-The correpsonding FA and MD images of the remaining PNG images are considered as passing the QA.
+""" legacy script!
+We performed quality assurance (QA) on the PNG images 
+and deleted the PNG images that show bad FA and MD images.
+The samples been deleted are considered as rejected from future use.
 
-Also, for ADNI, BIOCARD, NACC, OASIS3/4, ROSMAPMARS, and WRAP, we performed a QA on the
+Also, for ADNI, BIOCARD, NACC, OASIS3/4, ROSMAPMARS, and WRAP, we performed QA on the
 PreQual, SLANT, and white matter registration results during the ADSP project.
 We generated a list of PreQual paths that passed the QA.
 

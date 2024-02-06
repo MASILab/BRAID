@@ -1,4 +1,4 @@
-"""
+""" legacy script!
 We've done QA and filtered out unwanted scans from the databank_dti.
 And we've decided the age range we want the model to focus on.
 Now, we split the filtered databank_dti into train and test sets.
@@ -94,8 +94,8 @@ for _,row in df_test.iterrows():
         raise ValueError('There is information leakage between train and test sets.')
 
 print(f'Dataset splitting completed. Saving csv files to GDPR...\n')
-df_train.to_csv('/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/braid_train.csv', index=False)
-df_test.to_csv('/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/braid_test.csv', index=False)
+# df_train.to_csv('/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/braid_train.csv', index=False)
+# df_test.to_csv('/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/braid_test.csv', index=False)
 
 print('\n============ Training Set ============')
 print('------------ Overall ------------')
@@ -112,28 +112,27 @@ for dataset in df_test['dataset'].unique():
     summarize_dataset(df_test.loc[df_test['dataset'] == dataset, ].copy())
 
 
-# Data transfer
-print(f'\nTransferring data to {path_braid_data}\n')
+# # Data transfer
+# print(f'\nTransferring data to {path_braid_data}\n')
 
-df_all = pd.concat([df_train, df_test], ignore_index=True)
-if df_all.shape[0] != df_qa.shape[0]:
-    raise ValueError('The combined dataset does not have the same #rows as the original dataset.')
+# df_all = pd.concat([df_train, df_test], ignore_index=True)
+# if df_all.shape[0] != df_qa.shape[0]:
+#     raise ValueError('The combined dataset does not have the same #rows as the original dataset.')
 
-for _,row in tqdm(df_all.iterrows(), total=df_all.shape[0]):
-    fa = path_databank_dti / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'final' / 'fa_skullstrip_MNI152.nii.gz'
-    md = path_databank_dti / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'final' / 'md_skullstrip_MNI152.nii.gz'
+# for _,row in tqdm(df_all.iterrows(), total=df_all.shape[0]):
+#     fa = path_databank_dti / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'final' / 'fa_skullstrip_MNI152.nii.gz'
+#     md = path_databank_dti / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'final' / 'md_skullstrip_MNI152.nii.gz'
     
-    if not (fa.is_file() and md.is_file()):
-        raise ValueError(f'The following files do not exist: {fa}, {md}')
+#     if not (fa.is_file() and md.is_file()):
+#         raise ValueError(f'The following files do not exist: {fa}, {md}')
     
-    fa_dst = path_braid_data / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'fa_skullstrip_MNI152.nii.gz'
-    md_dst = path_braid_data / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'md_skullstrip_MNI152.nii.gz'
+#     fa_dst = path_braid_data / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'fa_skullstrip_MNI152.nii.gz'
+#     md_dst = path_braid_data / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'md_skullstrip_MNI152.nii.gz'
     
-    subprocess.run(['mkdir', '-p', str(fa_dst.parent)])
-    # subprocess.run(['rsync', '-a', str(fa), str(fa_dst)])
-    # subprocess.run(['rsync', '-a', str(md), str(md_dst)])
-    subprocess.run(['ln', '-s', str(fa), str(fa_dst)])
-    subprocess.run(['ln', '-s', str(md), str(md_dst)])
+#     subprocess.run(['mkdir', '-p', str(fa_dst.parent)])
+#     subprocess.run(['ln', '-s', str(fa), str(fa_dst)])
+#     subprocess.run(['ln', '-s', str(md), str(md_dst)])
+
 
 # 5 Folds for cross validation
 subjects = df_train['dataset_subject'].unique()
@@ -148,7 +147,7 @@ for i, (train_indices, val_indices) in enumerate(kf.split(subject_indices)):
     npy_train = path_cv_npy_root / f'subjects_fold_{i+1}_train.npy'
     npy_val = path_cv_npy_root / f'subjects_fold_{i+1}_val.npy'
     
-    np.save(npy_train, subjects_train)
-    np.save(npy_val, subjects_val)
+    # np.save(npy_train, subjects_train)
+    # np.save(npy_val, subjects_val)
 
 print(f'5-fold cross-validation completed. Saving .npy files to {path_cv_npy_root}\n')
