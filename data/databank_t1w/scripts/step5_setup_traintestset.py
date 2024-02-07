@@ -45,7 +45,7 @@ def train_test_split_following_braid(
     suffix,
     check_existence = True,
 ):
-    # Sessions used in BRAID
+    # Subjects used in BRAID
     braid_train = pd.read_csv(braid_train_csv)
     braid_test = pd.read_csv(braid_test_csv)
     subject_train = braid_train['dataset_subject'].tolist()
@@ -109,8 +109,12 @@ def symlink(tuple):
 
 
 if __name__ == "__main__":
+    # File paths
     databank_t1w_csv = '/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_t1w_v2.csv'
-    qa_results_csv = '/nfs/masi/gaoc11/projects/BRAID/data/databank_t1w/quality_assurance/2024-02-05_brain_affine/qa_rater1_freeze.csv'
+    list_qa_results_csv = [
+        '/nfs/masi/gaoc11/projects/BRAID/data/databank_t1w/quality_assurance/2024-02-05_brain_affine/qa_rater1_freeze.csv',
+        '/nfs/masi/gaoc11/projects/BRAID/data/databank_t1w/quality_assurance/2024-02-07_brain_affine_NACC_OASIS4_all/qa_rater1_freeze.csv',
+        ]
     braid_train_csv = '/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/braid_train.csv'
     braid_test_csv = '/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/braid_test.csv'
     t1wagepredict_train_csv = '/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/t1wagepredict_train.csv'
@@ -119,19 +123,21 @@ if __name__ == "__main__":
     suffix = '_T1w_brain_MNI152_Warped_crop_downsample.nii.gz'
     traintestset_dir = '/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/T1wAgePredict'
 
-    # df = pd.read_csv(databank_t1w_csv)
-    # df = filter_qa_results(df=df, qa_results_csv=qa_results_csv)
+    # Filter out bad data according to QA results
+    df = pd.read_csv(databank_t1w_csv)
+    for qa_results_csv in list_qa_results_csv:
+        df = filter_qa_results(df=df, qa_results_csv=qa_results_csv)
     
-    # train_test_split_following_braid(
-    #     braid_train_csv,
-    #     braid_test_csv,
-    #     df_filtered = df,
-    #     t1wagepredict_train_csv = t1wagepredict_train_csv,
-    #     t1wagepredict_test_csv = t1wagepredict_test_csv,
-    #     databank_t1w_dir = databank_t1w_dir,
-    #     suffix = suffix,
-    #     check_existence = True
-    # )
+    train_test_split_following_braid(
+        braid_train_csv,
+        braid_test_csv,
+        df_filtered = df,
+        t1wagepredict_train_csv = t1wagepredict_train_csv,
+        t1wagepredict_test_csv = t1wagepredict_test_csv,
+        databank_t1w_dir = databank_t1w_dir,
+        suffix = suffix,
+        check_existence = True
+    )
 
     list_job_tuples = create_symlink_job_tuple(t1wagepredict_train_csv, t1wagepredict_test_csv, databank_t1w_dir, suffix, traintestset_dir)
     
