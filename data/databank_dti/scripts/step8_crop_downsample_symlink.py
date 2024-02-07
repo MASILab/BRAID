@@ -79,8 +79,8 @@ def create_symlink_job_tuple(train_csv, test_csv, databank_dir, suffix, braid_di
         session = row['session']
         scan = f"scan-{row['scan']}"
         
-        fa_target = databank_dir / dataset / subject / session / scan / f"fa{suffix}"
-        md_target = databank_dir / dataset / subject / session / scan / f"md{suffix}"
+        fa_target = databank_dir / dataset / subject / session / scan / 'final' / f"fa{suffix}"
+        md_target = databank_dir / dataset / subject / session / scan / 'final' / f"md{suffix}"
         fa_link = braid_dir / dataset / subject / session / scan / f"fa{suffix}"
         md_link = braid_dir / dataset / subject / session / scan / f"md{suffix}"
         
@@ -99,27 +99,28 @@ def symlink(tuple):
 
 if __name__ == "__main__":
     
-    databank_dti = Path('/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/databank_dti')
+    databank_dti = Path('/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/databank_dti')
     suffix = '_skullstrip_MNI152_warped.nii.gz'
     num_workers = 4
     
-    # Crop and downsample the FA and MD images
-    for dataset_dir in databank_dti.iterdir():
-        if not dataset_dir.is_dir():
-            continue
+    # # Crop and downsample the FA and MD images
+    # for dataset_dir in databank_dti.iterdir():
+    #     if not dataset_dir.is_dir():
+    #         continue
 
-        list_t1w = find_files(root_dir=dataset_dir, suffix=suffix)
-        dataset = Preprocessing_Dataset(list_t1w=list_t1w, data_root_dir=dataset_dir)
-        dataloader = DataLoader(dataset=dataset, batch_size=num_workers, shuffle=False, 
-                                num_workers=num_workers, pin_memory = False, prefetch_factor=None)
+    #     list_t1w = find_files(root_dir=dataset_dir, suffix=suffix)
+    #     dataset = Preprocessing_Dataset(list_t1w=list_t1w, data_root_dir=dataset_dir)
+    #     dataloader = DataLoader(dataset=dataset, batch_size=num_workers, shuffle=False, 
+    #                             num_workers=num_workers, pin_memory = False, prefetch_factor=None)
 
-        list(tqdm(dataloader, total=len(dataloader), desc=f'Crop and downsample T1w {dataset_dir.name}'))
+    #     for _ in tqdm(dataloader, total=len(dataloader), desc=f'Crop and downsample FA/MD from {dataset_dir.name}'):
+    #         passq
 
     # Symlink final FA and MD we need to braid_dataset
-    braid_dataset = Path('/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/braid_dataset')
+    braid_dataset = Path('/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/braid_dataset_ss_affine_warp_crop_downsample')
     suffix = '_skullstrip_MNI152_warped_crop_downsample.nii.gz'
-    train_csv = '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/braid_train.csv'
-    test_csv = '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/braid_test.csv'
+    train_csv = '/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/braid_train.csv'
+    test_csv = '/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/braid_test.csv'
     
     list_job_tuples = create_symlink_job_tuple(train_csv, test_csv, databank_dti, suffix, braid_dataset)
     with Pool(processes=num_workers) as pool:
