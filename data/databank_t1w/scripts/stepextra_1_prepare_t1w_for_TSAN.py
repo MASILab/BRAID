@@ -1,10 +1,10 @@
-""" Crop, downsample, normalize T1w images for TSAN.
+""" Crop, downsample T1w images for TSAN.
 """
 
 import os
 import torch
 from tqdm import tqdm
-from pathlib import Path, PosixPath
+from pathlib import Path
 from torch.utils.data import Dataset, DataLoader
 from monai.transforms import (
     Compose,
@@ -13,12 +13,11 @@ from monai.transforms import (
     Orientation,
     CenterSpatialCrop,
     Spacing,
-    NormalizeIntensity,
     SaveImage,
 )
 torch.set_flush_denormal(True)
 
-def list_t1w_mni152(root_dir, suffix='_T1w_MNI152_Warped.nii.gz'):
+def list_t1w_mni152(root_dir, suffix):
     
     list_t1w = []
     for root, dirs, files in os.walk(root_dir):
@@ -31,11 +30,7 @@ def list_t1w_mni152(root_dir, suffix='_T1w_MNI152_Warped.nii.gz'):
 
 
 class Preprocessing_Dataset(Dataset):
-    def __init__(
-        self,
-        list_t1w: list[str] | list[PosixPath],
-        data_root_dir: str | PosixPath,
-    ) -> None:
+    def __init__(self, list_t1w, data_root_dir):
         
         self.list_t1w = list_t1w
         self.transform = Compose([
@@ -44,7 +39,6 @@ class Preprocessing_Dataset(Dataset):
             Orientation(axcodes="RAS"),
             CenterSpatialCrop(roi_size=(182, 218, 182)),
             Spacing(pixdim=(2, 2, 2), mode='bilinear'), # expected: 91 x 109 x 91, 2mm^3
-            NormalizeIntensity(nonzero=True),
             SaveImage(
                 output_postfix='crop_downsample_2mm', 
                 output_ext='.nii.gz', 
@@ -64,17 +58,17 @@ class Preprocessing_Dataset(Dataset):
 
 
 if __name__ == "__main__":
-    databank_t1w = Path('/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/databank_t1w')
+    databank_t1w = Path('/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/databank_t1w')
     list_datasets = [fd for fd in databank_t1w.iterdir() if fd.is_dir()]
     
     for dataset_dir in list_datasets:
-        if dataset_dir.name in []:
+        if dataset_dir.name in ['UKBB', 'OASIS4']:
             print(f'Manually skip {dataset_dir.name}')
             continue
 
         list_t1w = list_t1w_mni152(
             root_dir=dataset_dir, 
-            suffix='_T1w_MNI152_Warped.nii.gz'
+            suffix='_T1w_brain_MNI152_Warped.nii.gz'
             )
         
         dataset = Preprocessing_Dataset(
@@ -84,11 +78,12 @@ if __name__ == "__main__":
 
         dataloader = DataLoader(
             dataset=dataset,
-            batch_size = 4,
+            batch_size = 1,
             shuffle = False,
-            num_workers = 8,
-            pin_memory = True,
-            prefetch_factor = 2,
+            num_workers = 0,
+            pin_memory = False,
+            prefetch_factor = None,
         )
 
-        list(tqdm(dataloader, total=len(dataloader), desc='Crop, downsample, normalize T1w in MNI152'))
+        for _ in tqdm(dataloader, total=len(dataloader), desc='Crop, downsample T1w for TSAN'):
+            pass
