@@ -37,8 +37,8 @@ class Preprocessing_Dataset(Dataset):
             LoadImage(reader="NibabelReader", image_only=True),
             EnsureChannelFirst(),
             Orientation(axcodes="RAS"),
-            CenterSpatialCrop(roi_size=(182, 218, 182)),
-            Spacing(pixdim=(2, 2, 2), mode='bilinear'), # expected: 91 x 109 x 91, 2mm^3
+            Spacing(pixdim=(2.0, 2.0, 2.0), mode='bilinear'),  # Found that spacing will try to output even-number dimension like (92, 110, 92).
+            CenterSpatialCrop(roi_size=(91, 109, 91)),         # So we swap the CenterSpatialCrop and Spacing
             SaveImage(
                 output_postfix='crop_downsample_2mm', 
                 output_ext='.nii.gz', 
@@ -62,7 +62,7 @@ if __name__ == "__main__":
     list_datasets = [fd for fd in databank_t1w.iterdir() if fd.is_dir()]
     
     for dataset_dir in list_datasets:
-        if dataset_dir.name in ['UKBB', 'OASIS4']:
+        if dataset_dir.name in []:
             print(f'Manually skip {dataset_dir.name}')
             continue
 
@@ -78,11 +78,11 @@ if __name__ == "__main__":
 
         dataloader = DataLoader(
             dataset=dataset,
-            batch_size = 1,
+            batch_size = 4,
             shuffle = False,
-            num_workers = 0,
+            num_workers = 8,
             pin_memory = False,
-            prefetch_factor = None,
+            prefetch_factor = 2,
         )
 
         for _ in tqdm(dataloader, total=len(dataloader), desc='Crop, downsample T1w for TSAN'):
