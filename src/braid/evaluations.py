@@ -10,12 +10,13 @@ from pathlib import Path, PosixPath
 from braid.models import get_the_resnet_model
 
 
-def load_trained_model(model_name, mlp_hidden_layer_sizes, feature_vector_length, path_pth, device='cuda'):
+def load_trained_model(model_name, mlp_hidden_layer_sizes, feature_vector_length, n_input_channels, path_pth, device='cuda'):
     # model architecture
     model = get_the_resnet_model(
         model_name = model_name,
         feature_vector_length = feature_vector_length,
         MLP_hidden_layer_sizes = mlp_hidden_layer_sizes,
+        n_input_channels = n_input_channels,
     )
     
     # load model weights
@@ -628,12 +629,3 @@ class AgePredictionEvaluator():
         fig.subplots_adjust(hspace=0.2,wspace=0.05)
         fig.savefig(save_png, dpi=dpi, bbox_inches='tight')
 
-
-# ICC
-# cognitive score correlation
-
-evaluator = AgePredictionEvaluator(prediction_csv='models/2023-12-22_ResNet101/predictions/predicted_age_fold-3.csv')
-evaluator.visualize_ADNI_cognitive_scores_spaghetti_lme(
-        csv_adni = 'data/subject_info/clean/ADNI_info_w_approximate_cogn_scores.csv',
-        save_png = 'adni_plot.png',
-    )

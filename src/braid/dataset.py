@@ -238,8 +238,8 @@ class BRAID_Dataset(Dataset):
             LoadImaged(keys=['fa', 'md'], image_only=False),
             EnsureChannelFirstd(keys=['fa', 'md']),
             Orientationd(keys=['fa', 'md'], axcodes="RAS"),
-            CenterSpatialCropd(keys=['fa', 'md'], roi_size=(192, 228, 192)),
-            Spacingd(keys=['fa', 'md'], pixdim=(1.5, 1.5, 1.5), mode=('bilinear', 'bilinear')),  # expected: 128 x 152 x 128, 1.5mm^3
+            # CenterSpatialCropd(keys=['fa', 'md'], roi_size=(192, 228, 192)),
+            # Spacingd(keys=['fa', 'md'], pixdim=(1.5, 1.5, 1.5), mode=('bilinear', 'bilinear')),  # expected: 128 x 152 x 128, 1.5mm^3
             ToTensord(keys=['fa', 'md']),
             ConcatItemsd(keys=['fa', 'md'], name='images')  
         ])
@@ -250,8 +250,8 @@ class BRAID_Dataset(Dataset):
     def __getitem__(self, idx):
         row = self.df.loc[self.df['scan_id']==self.list_scans[idx], ].iloc[0]
 
-        fa = self.dataset_root / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'fa_skullstrip_MNI152.nii.gz'
-        md = self.dataset_root / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'md_skullstrip_MNI152.nii.gz'
+        fa = self.dataset_root / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'fa_skullstrip_MNI152_warped_crop_downsample.nii.gz'
+        md = self.dataset_root / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'md_skullstrip_MNI152_warped_crop_downsample.nii.gz'
         data_dict = {'fa': fa, 'md': md}
         data_dict = self.transform(data_dict)
         images = data_dict['images']
@@ -289,7 +289,7 @@ class T1wAge_Dataset(Dataset):
     
     def __getitem__(self, idx):
         row = self.df.loc[self.df['scan_id']==self.list_scans[idx], ].iloc[0]
-        img = self.dataset_root / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / f"{row['dataset']}_{row['subject']}_{row['session']}_scan-{row['scan']}_T1w_MNI152_Warped_crop_downsample.nii.gz"
+        img = self.dataset_root / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / f"{row['dataset']}_{row['subject']}_{row['session']}_scan-{row['scan']}_T1w_brain_MNI152_Warped_crop_downsample.nii.gz"
         img = self.transform(img)
         
         label_feature = vectorize_sex_race(row['sex'], row['race_simple'])

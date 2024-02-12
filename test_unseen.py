@@ -14,7 +14,7 @@ import pandas as pd
 from pathlib import Path
 from tqdm import tqdm
 from braid.evaluations import load_trained_model
-from braid.dataset import get_the_sequence_of_scans, get_BRAID_dataloader
+from braid.dataset import get_the_sequence_of_scans, get_dataloader
 torch.set_flush_denormal(True)
 device = torch.device('cuda')
 
@@ -45,7 +45,8 @@ if __name__ == "__main__":
             mode = 'test'
         )
         
-        dataloader_test = get_BRAID_dataloader(
+        dataloader_test = get_dataloader(
+            modality=config.get('modality', 'DTI'),
             dataset_root = config['dataset']['root'],
             csv_file = config['dataset']['csv_file'],
             list_scans = list_scans_test,
@@ -60,6 +61,7 @@ if __name__ == "__main__":
             model_name = config['model']['name'],
             mlp_hidden_layer_sizes = config['model']['mlp_hidden_layer_sizes'], 
             feature_vector_length = config['model']['feature_vector_length'], 
+            n_input_channels=config['model']['n_input_channels'],
             path_pth = path_pth,
         )
         
