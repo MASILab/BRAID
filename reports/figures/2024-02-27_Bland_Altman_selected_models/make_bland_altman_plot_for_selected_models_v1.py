@@ -208,7 +208,10 @@ class bland_altman_plot():
                 self.plot_training(csv)
                 
             else:
-                print(f'csv name {csv.name} is not classified correctly.')        
+                print(f'csv name {csv.name} is not classified correctly.')
+            
+            plt.close('all')
+    
     
 if __name__ == "__main__":
     selected_models = [
@@ -217,13 +220,16 @@ if __name__ == "__main__":
             'databank_csv': '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti_v2.csv'
         },
         {
+            'prediction_root': 'models/2024-02-12_TSAN_first_stage/predictions',
+            'databank_csv': '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_t1w_v2.csv'
+        },
+        {
             'prediction_root': 'models/2024-02-13_TSAN_second_stage/predictions',
             'databank_csv': '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_t1w_v2.csv'
         },
         {
             'prediction_root': 'models/2024-02-07_T1wAge_ResNet101/predictions',
-            'databank_csv': '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_t1w_v2.csv'
-        
+            'databank_csv': '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_t1w_v2.csv'        
         },
         {
             'prediction_root': 'models/2023-12-22_ResNet101/predictions',
