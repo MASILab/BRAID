@@ -1,4 +1,4 @@
-import pdb
+import random
 import pandas as pd
 from pathlib import Path
 from tqdm import tqdm
@@ -47,32 +47,37 @@ class DataPreparation:
                     (df['diagnosis'].isin(['normal', 'MCI', 'dementia'])), ].copy()
         
         df['category'] = None
-        df['dsubj'] = df['dataset'] + '_' + df['subject']
+        df['subj'] = df['dataset'] + '_' + df['subject']
         # first session of the disease-free subjects (with at least one follow-up session)
-        for subj in df.loc[df['diagnosis']=='normal', 'dsubj'].unique():
-            if (len(df.loc[df['dsubj']==subj, 'diagnosis'].unique()) == 1) and (len(df.loc[df['dsubj']==subj, 'age_gt'].unique()) >= 2):
-                df.loc[(df['dsubj'] == subj) & (df['age_gt'] == df.loc[df['dsubj'] == subj, 'age_gt'].min()), 'category'] = 'CN'
-
+        for subj in df.loc[df['diagnosis']=='normal', 'subj'].unique():
+            if (len(df.loc[df['subj']==subj, 'diagnosis'].unique()) == 1) and (len(df.loc[df['subj']==subj, 'age_gt'].unique()) >= 2):
+                df.loc[(df['subj'] == subj) & (df['age_gt'] == df.loc[df['subj'] == subj, 'age_gt'].min()), 'category'] = 'CN'
+        
         # session after which the subject converted to MCI or dementia
-        for subj in df.loc[df['diagnosis'].isin(['MCI', 'dementia']), 'dsubj'].unique():
-            rows_subj = df.loc[df['dsubj']==subj, ].copy()
+        for subj in df.loc[df['diagnosis'].isin(['MCI', 'dementia']), 'subj'].unique():
+            if subj in df.loc[df['category'].notna(), 'subj'].unique():
+                continue
+            rows_subj = df.loc[df['subj']==subj, ].copy()
             if 'normal' in rows_subj['diagnosis'].values:
                 rows_subj = rows_subj.sort_values(by='age_gt')
                 for i in range(len(rows_subj.index)-1):
                     if (rows_subj.iloc[i]['diagnosis'] == 'normal') & (rows_subj.iloc[i+1]['diagnosis'] in ['MCI', 'dementia']):
-                        df.loc[(df['dsubj'] == subj) & 
-                               (df['age_gt'] == rows_subj.iloc[i]['age_gt']), 'category'] = 'CN*'
+                        df.loc[(df['subj'] == subj) & (df['age_gt'] == rows_subj.iloc[i]['age_gt']), 'category'] = 'CN*'
                         break
         
         # the last session of the MCI subjects
-        for subj in df.loc[df['diagnosis']=='MCI', 'dsubj'].unique():
-            df.loc[(df['dsubj'] == subj) &
-                   (df['age_gt'] == df.loc[(df['dsubj'] == subj)&(df['diagnosis']=='MCI'), 'age_gt'].max()), 'category'] = 'MCI'
+        for subj in df.loc[df['diagnosis']=='MCI', 'subj'].unique():
+            if subj in df.loc[df['category'].notna(), 'subj'].unique():
+                continue
+            df.loc[(df['subj'] == subj) &
+                   (df['age_gt'] == df.loc[(df['subj'] == subj)&(df['diagnosis']=='MCI'), 'age_gt'].max()), 'category'] = 'MCI'
         
         # the last session of the dementia subjects
-        for subj in df.loc[df['diagnosis']=='dementia', 'dsubj'].unique():
-            df.loc[(df['dsubj'] == subj) &
-                   (df['age_gt'] == df.loc[(df['dsubj'] == subj)&(df['diagnosis']=='dementia'), 'age_gt'].max()), 'category'] = 'AD'
+        for subj in df.loc[df['diagnosis']=='dementia', 'subj'].unique():
+            if subj in df.loc[df['category'].notna(), 'subj'].unique():
+                continue
+            df.loc[(df['subj'] == subj) &
+                   (df['age_gt'] == df.loc[(df['subj'] == subj)&(df['diagnosis']=='dementia'), 'age_gt'].max()), 'category'] = 'AD'
         
         df = df.dropna(subset=['category'])
         return df
@@ -82,8 +87,14 @@ class DataPreparation:
         num_max = df[column_class].value_counts().max()
         for c in df[column_class].unique():
             num_ori = df[column_class].value_counts()[c]
-            if num_ori < num_max:
-                new_samples = df.loc[df[column_class] == c, ].sample(n=num_max-num_ori, replace=True, random_state=random_state)
+            num_add = num_max - num_ori
+            if num_add == 0:
+                continue
+            elif num_add <= num_ori:
+                new_samples = df.loc[df[column_class]==c, ].sample(n=num_add, replace=False, random_state=random_state)
+                df = pd.concat([df, new_samples], axis=0)
+            elif num_add > num_ori:
+                new_samples = df.loc[df[column_class]==c, ].sample(n=num_add, replace=True, random_state=random_state)
                 df = pd.concat([df, new_samples], axis=0)
         return df
 
@@ -93,14 +104,18 @@ class DataPreparation:
         """
         assert column_name not in df.columns, f'Column {column_name} already exists in the dataframe'
 
-        df[column_name] = 1  # we will sample num_folds-1 times, and the rest will be fold-1
+        df[column_name] = None
 
         for c in df['category'].unique():
-            num_total = len(df.loc[df['category']==c, ].index)
-            num_per_fold = num_total // num_folds
-            for fold_idx in range(2, num_folds+1):
-                dsubj_fold = df['dsubj'].sample(n=num_per_fold, replace=False, random_state=random_state).values
-                df.loc[df['dsubj'].isin(dsubj_fold), column_name] = fold_idx
+            subj_category = df.loc[df['category']==c, 'subj'].unique().tolist()
+            random.seed(random_state)
+            random.shuffle(subj_category)
+            indices = [int(i*len(subj_category)/num_folds) for i in range(num_folds+1)]
+            
+            for i in range(num_folds):
+                df.loc[(df['category']==c) & df['subj'].isin(subj_category[indices[i]:indices[i+1]]), column_name] = i+1
+        
+        assert df[column_name].notna().all(), f'Not all samples are assigned to a fold'                
         return df
         
 dict_models = {
@@ -127,5 +142,5 @@ df = d.load_data()
 df = d.take_cross_sectional_samples(df)
 df = d.over_sampling(df)
 df = d.subject_level_splitting(df)
-
+df.to_csv('tmp.csv', index=False)
 # TODO: data preparation is done, please move forward with feature/model configuration
