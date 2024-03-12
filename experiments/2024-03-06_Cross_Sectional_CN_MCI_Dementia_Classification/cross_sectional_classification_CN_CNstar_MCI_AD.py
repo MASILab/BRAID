@@ -1,7 +1,17 @@
+import pdb
 import random
 import pandas as pd
 from pathlib import Path
 from tqdm import tqdm
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.gaussian_process.kernels import RBF
+from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import accuracy_score, balanced_accuracy_score, confusion_matrix, roc_auc_score
 
 class DataPreparation:
     def __init__(self, dict_models, databank_csv):
@@ -137,10 +147,236 @@ dict_models = {
         },
 }
 
-d = DataPreparation(dict_models, databank_csv='/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti_v2.csv')
-df = d.load_data()
-df = d.take_cross_sectional_samples(df)
-df = d.over_sampling(df)
-df = d.subject_level_splitting(df)
-df.to_csv('tmp.csv', index=False)
-# TODO: data preparation is done, please move forward with feature/model configuration
+# d = DataPreparation(dict_models, databank_csv='/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti_v2.csv')
+# df = d.load_data()
+# df = d.take_cross_sectional_samples(df)
+# df = d.over_sampling(df)
+# df = d.subject_level_splitting(df)
+# df.to_csv('experiments/2024-03-06_Cross_Sectional_CN_MCI_Dementia_Classification/data.csv', index=False)
+df = pd.read_csv('experiments/2024-03-06_Cross_Sectional_CN_MCI_Dementia_Classification/data.csv')
+
+# feature combinations
+feat_combo = {}
+feat_combo['chronological age only'] = ['age_gt']
+feat_combo['WM age only'] = ['age_pred_wm_age_mean']
+feat_combo['WM age (contaminated) only'] = ['age_pred_wm_age_contaminated_mean']
+feat_combo['GM age only'] = ['age_pred_gm_age_ours_mean']
+feat_combo['GM age (TSAN) only'] = ['age_pred_gm_age_tsan_mean']
+feat_combo['chronological + WM age (each fold)'] = ['age_gt'] + [f'age_pred_wm_age_{i}' for i in [1,2,3,4,5]]
+feat_combo['chronological + WM age (mean)'] = ['age_gt'] + ['age_pred_wm_age_mean']
+feat_combo['chronological + WM age (each fold + mean)'] = ['age_gt'] + [f'age_pred_wm_age_{i}' for i in [1,2,3,4,5]] + ['age_pred_wm_age_mean']
+feat_combo['chronological + GM age (each fold)'] = ['age_gt'] + [f'age_pred_gm_age_ours_{i}' for i in [1,2,3,4,5]]
+feat_combo['chronological + GM age (mean)'] = ['age_gt'] + ['age_pred_gm_age_ours_mean']
+feat_combo['chronological + GM age (each fold + mean)'] = ['age_gt'] + [f'age_pred_gm_age_ours_{i}' for i in [1,2,3,4,5]] + ['age_pred_gm_age_ours_mean']
+feat_combo['chronological + WM age (contaminated) (each fold)'] = ['age_gt'] + [f'age_pred_wm_age_contaminated_{i}' for i in [1,2,3,4,5]]
+feat_combo['chronological + WM age (contaminated) (mean)'] = ['age_gt'] + ['age_pred_wm_age_contaminated_mean']
+feat_combo['chronological + WM age (contaminated) (each fold + mean)'] = ['age_gt'] + [f'age_pred_wm_age_contaminated_{i}' for i in [1,2,3,4,5]] + ['age_pred_wm_age_contaminated_mean']
+feat_combo['chronological + WM age + GM age (each fold)'] = ['age_gt'] + [f'age_pred_wm_age_{i}' for i in [1,2,3,4,5]] + [f'age_pred_gm_age_ours_{i}' for i in [1,2,3,4,5]]
+feat_combo['chronological + WM age + GM age (mean)'] = ['age_gt'] + ['age_pred_wm_age_mean'] + ['age_pred_gm_age_ours_mean']
+feat_combo['chronological + WM age + GM age (each fold + mean)'] = ['age_gt'] + [f'age_pred_wm_age_{i}' for i in [1,2,3,4,5]] + ['age_pred_wm_age_mean'] + [f'age_pred_gm_age_ours_{i}' for i in [1,2,3,4,5]] + ['age_pred_gm_age_ours_mean']
+feat_combo['chronological + GM age (TSAN) (each fold)'] = ['age_gt'] + [f'age_pred_gm_age_tsan_{i}' for i in [1,2,3,4,5]]
+feat_combo['chronological + GM age (TSAN) (mean)'] = ['age_gt'] + ['age_pred_gm_age_tsan_mean']
+feat_combo['chronological + GM age (TSAN) (each fold + mean)'] = ['age_gt'] + [f'age_pred_gm_age_tsan_{i}' for i in [1,2,3,4,5]] + ['age_pred_gm_age_tsan_mean']
+
+# classifiers
+classifiers = {
+    'Logistic Regression': LogisticRegression(random_state=42, max_iter=1000),
+    'Linear SVM': SVC(kernel="linear", C=0.025, probability=True, random_state=42),
+    'RBF SVM': SVC(gamma=2, C=1, probability=True, random_state=42),
+    'Gaussian Process': GaussianProcessClassifier(1.0 * RBF(1.0), random_state=42, n_jobs=-1),
+    'Decision Tree': DecisionTreeClassifier(max_depth=5, random_state=42),
+    'Random Forest': RandomForestClassifier(
+        max_depth=5, n_estimators=10, max_features=1, random_state=42
+    ),
+    'Naive Bayes': GaussianNB(),
+    'Nearest Neighbors': KNeighborsClassifier(3),
+}
+
+# Task 1: CN vs AD
+data = df.loc[df['category'].isin(['CN', 'AD']), ].copy()
+data['category'] = data['category'].map({'CN': 0, 'AD': 1})
+
+results = pd.DataFrame()
+for combo_name, features in tqdm(feat_combo.items(), total=len(feat_combo), desc='Classification'):
+    num_features = len(features)
+    for classifier_name, clf in classifiers.items():
+        accs, baccs, specs, senss, aucs = [], [], [], [], []
+        for fold_idx in [1,2,3,4,5]:
+            X_train = data.loc[data['fold_idx']!=fold_idx, features].values
+            y_train = data.loc[data['fold_idx']!=fold_idx, 'category'].values
+            X_test = data.loc[data['fold_idx']==fold_idx, features].values
+            y_test = data.loc[data['fold_idx']==fold_idx, 'category'].values
+            
+            clf.fit(X_train, y_train)
+            y_pred = clf.predict(X_test)
+            acc = accuracy_score(y_test, y_pred)
+            bacc = balanced_accuracy_score(y_test, y_pred)
+            tn, fp, fn, tp = confusion_matrix(y_test, y_pred).ravel()
+            spec = tn / (tn + fp)
+            sens = tp / (tp + fn)
+            auc = roc_auc_score(y_test, clf.predict_proba(X_test)[:, 1])
+            accs.append(acc)
+            baccs.append(bacc)
+            specs.append(spec)
+            senss.append(sens)
+            aucs.append(auc)
+
+        acc_mean = sum(accs) / len(accs)
+        acc_std = (sum([(x - acc_mean)**2 for x in accs])/len(accs))**0.5
+        bacc_mean = sum(baccs) / len(baccs)
+        bacc_std = (sum([(x - bacc_mean)**2 for x in baccs])/len(baccs))**0.5
+        spec_mean = sum(specs) / len(specs)
+        spec_std = (sum([(x - spec_mean)**2 for x in specs])/len(specs))**0.5
+        sens_mean = sum(senss) / len(senss)
+        sens_std = (sum([(x - sens_mean)**2 for x in senss])/len(senss))**0.5
+        auc_mean = sum(aucs) / len(aucs)
+        auc_std = (sum([(x - auc_mean)**2 for x in aucs])/len(aucs))**0.5
+
+        result = pd.DataFrame({
+            'feature_combination': [combo_name],
+            'num_features': [num_features],
+            'classifier': [classifier_name],
+            'acc_mean': [acc_mean],
+            'acc_std': [acc_std],
+            'bacc_mean': [bacc_mean],
+            'bacc_std': [bacc_std],
+            'spec_mean': [spec_mean],
+            'spec_std': [spec_std],
+            'sens_mean': [sens_mean],
+            'sens_std': [sens_std],
+            'auc_mean': [auc_mean],
+            'auc_std': [auc_std],
+            'sanity_check_acc': [str(accs)],
+            'sanity_check_bacc': [str(baccs)],
+            'sanity_check_spec': [str(specs)],
+            'sanity_check_sens': [str(senss)],
+            'sanity_check_auc': [str(aucs)]
+        })
+        results = pd.concat([results, result], axis=0)
+results.to_csv('experiments/2024-03-06_Cross_Sectional_CN_MCI_Dementia_Classification/results_CN_vs_AD.csv', index=False)
+
+# Task 2: CN vs MCI
+data = df.loc[df['category'].isin(['CN', 'MCI']), ].copy()
+data['category'] = data['category'].map({'CN': 0, 'MCI': 1})
+
+results = pd.DataFrame()
+for combo_name, features in tqdm(feat_combo.items(), total=len(feat_combo), desc='Classification'):
+    num_features = len(features)
+    for classifier_name, clf in classifiers.items():
+        accs, baccs, specs, senss, aucs = [], [], [], [], []
+        for fold_idx in [1,2,3,4,5]:
+            X_train = data.loc[data['fold_idx']!=fold_idx, features].values
+            y_train = data.loc[data['fold_idx']!=fold_idx, 'category'].values
+            X_test = data.loc[data['fold_idx']==fold_idx, features].values
+            y_test = data.loc[data['fold_idx']==fold_idx, 'category'].values
+            
+            clf.fit(X_train, y_train)
+            y_pred = clf.predict(X_test)
+            acc = accuracy_score(y_test, y_pred)
+            bacc = balanced_accuracy_score(y_test, y_pred)
+            tn, fp, fn, tp = confusion_matrix(y_test, y_pred).ravel()
+            spec = tn / (tn + fp)
+            sens = tp / (tp + fn)
+            auc = roc_auc_score(y_test, clf.predict_proba(X_test)[:, 1])
+            accs.append(acc)
+            baccs.append(bacc)
+            specs.append(spec)
+            senss.append(sens)
+            aucs.append(auc)
+
+        acc_mean = sum(accs) / len(accs)
+        acc_std = (sum([(x - acc_mean)**2 for x in accs])/len(accs))**0.5
+        bacc_mean = sum(baccs) / len(baccs)
+        bacc_std = (sum([(x - bacc_mean)**2 for x in baccs])/len(baccs))**0.5
+        spec_mean = sum(specs) / len(specs)
+        spec_std = (sum([(x - spec_mean)**2 for x in specs])/len(specs))**0.5
+        sens_mean = sum(senss) / len(senss)
+        sens_std = (sum([(x - sens_mean)**2 for x in senss])/len(senss))**0.5
+        auc_mean = sum(aucs) / len(aucs)
+        auc_std = (sum([(x - auc_mean)**2 for x in aucs])/len(aucs))**0.5
+
+        result = pd.DataFrame({
+            'feature_combination': [combo_name],
+            'num_features': [num_features],
+            'classifier': [classifier_name],
+            'acc_mean': [acc_mean],
+            'acc_std': [acc_std],
+            'bacc_mean': [bacc_mean],
+            'bacc_std': [bacc_std],
+            'spec_mean': [spec_mean],
+            'spec_std': [spec_std],
+            'sens_mean': [sens_mean],
+            'sens_std': [sens_std],
+            'auc_mean': [auc_mean],
+            'auc_std': [auc_std],
+            'sanity_check_acc': [str(accs)],
+            'sanity_check_bacc': [str(baccs)],
+            'sanity_check_spec': [str(specs)],
+            'sanity_check_sens': [str(senss)],
+            'sanity_check_auc': [str(aucs)]
+        })
+        results = pd.concat([results, result], axis=0)
+results.to_csv('experiments/2024-03-06_Cross_Sectional_CN_MCI_Dementia_Classification/results_CN_vs_MCI.csv', index=False)
+
+# Task 3: CN vs CN*
+data = df.loc[df['category'].isin(['CN', 'CN*']), ].copy()
+data['category'] = data['category'].map({'CN': 0, 'CN*': 1})
+
+results = pd.DataFrame()
+for combo_name, features in tqdm(feat_combo.items(), total=len(feat_combo), desc='Classification'):
+    num_features = len(features)
+    for classifier_name, clf in classifiers.items():
+        accs, baccs, specs, senss, aucs = [], [], [], [], []
+        for fold_idx in [1,2,3,4,5]:
+            X_train = data.loc[data['fold_idx']!=fold_idx, features].values
+            y_train = data.loc[data['fold_idx']!=fold_idx, 'category'].values
+            X_test = data.loc[data['fold_idx']==fold_idx, features].values
+            y_test = data.loc[data['fold_idx']==fold_idx, 'category'].values
+            
+            clf.fit(X_train, y_train)
+            y_pred = clf.predict(X_test)
+            acc = accuracy_score(y_test, y_pred)
+            bacc = balanced_accuracy_score(y_test, y_pred)
+            tn, fp, fn, tp = confusion_matrix(y_test, y_pred).ravel()
+            spec = tn / (tn + fp)
+            sens = tp / (tp + fn)
+            auc = roc_auc_score(y_test, clf.predict_proba(X_test)[:, 1])
+            accs.append(acc)
+            baccs.append(bacc)
+            specs.append(spec)
+            senss.append(sens)
+            aucs.append(auc)
+
+        acc_mean = sum(accs) / len(accs)
+        acc_std = (sum([(x - acc_mean)**2 for x in accs])/len(accs))**0.5
+        bacc_mean = sum(baccs) / len(baccs)
+        bacc_std = (sum([(x - bacc_mean)**2 for x in baccs])/len(baccs))**0.5
+        spec_mean = sum(specs) / len(specs)
+        spec_std = (sum([(x - spec_mean)**2 for x in specs])/len(specs))**0.5
+        sens_mean = sum(senss) / len(senss)
+        sens_std = (sum([(x - sens_mean)**2 for x in senss])/len(senss))**0.5
+        auc_mean = sum(aucs) / len(aucs)
+        auc_std = (sum([(x - auc_mean)**2 for x in aucs])/len(aucs))**0.5
+
+        result = pd.DataFrame({
+            'feature_combination': [combo_name],
+            'num_features': [num_features],
+            'classifier': [classifier_name],
+            'acc_mean': [acc_mean],
+            'acc_std': [acc_std],
+            'bacc_mean': [bacc_mean],
+            'bacc_std': [bacc_std],
+            'spec_mean': [spec_mean],
+            'spec_std': [spec_std],
+            'sens_mean': [sens_mean],
+            'sens_std': [sens_std],
+            'auc_mean': [auc_mean],
+            'auc_std': [auc_std],
+            'sanity_check_acc': [str(accs)],
+            'sanity_check_bacc': [str(baccs)],
+            'sanity_check_spec': [str(specs)],
+            'sanity_check_sens': [str(senss)],
+            'sanity_check_auc': [str(aucs)]
+        })
+        results = pd.concat([results, result], axis=0)
+results.to_csv('experiments/2024-03-06_Cross_Sectional_CN_MCI_Dementia_Classification/results_CN_vs_CNstar.csv', index=False)
