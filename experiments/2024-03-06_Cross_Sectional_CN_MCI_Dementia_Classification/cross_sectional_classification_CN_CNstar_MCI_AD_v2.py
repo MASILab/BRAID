@@ -94,7 +94,7 @@ def run_classification_experiments(data, feat_combo, classifiers, results_csv):
         results_simple = pd.concat([results_simple, row_simple], axis=0)
 
     results.to_csv(results_csv, index=False)
-    results_simple.to_csv(results_csv.replace('.csv', '_simple.csv'), index=False)
+    results_simple.to_excel(results_csv.replace('.csv', '_simple.xlsx'), index=False)
 
 
 class DataPreparation:

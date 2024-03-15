@@ -8,6 +8,7 @@ models/*/sanity_check
 # Data
 reports/figures/2024-03-12_Raincloud_plot_Diagnosis_Group_Comparison/figs
 experiments/2024-03-06_Cross_Sectional_CN_MCI_Dementia_Classification/*.csv
+experiments/2024-03-06_Cross_Sectional_CN_MCI_Dementia_Classification/*.xlsx
 reports/figures/2024-03-04_Bland_Altman_WM_vs_GM_Age/figs
 reports/figures/2024-02-28_Method_Figure_Warped_Brain/csv/
 reports/figures/2024-02-28_Method_Figure_Warped_Brain/figs/
