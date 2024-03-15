@@ -4,6 +4,8 @@
 - Automatic feature selection: best performance for each method and classifier.
 - Min-max normalization to speed up the model fitting
 - Encapsulate the classification experiments into an (ugly) function
+- Optimize hyperparameters for each classifier
+- Save the results in a simple format as well, for easier tabulation
 """
 
 import pdb
@@ -17,16 +19,16 @@ from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.gaussian_process import GaussianProcessClassifier
-from sklearn.gaussian_process.kernels import RBF
 from sklearn.naive_bayes import GaussianNB
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, confusion_matrix, roc_auc_score
 
 
 def run_classification_experiments(data, feat_combo, classifiers, results_csv):
     results = pd.DataFrame()
+    results_simple = pd.DataFrame()
     for combo_name, list_feat in feat_combo.items():
         row = {'Features': [combo_name]}
+        row_simple = {'Features': [combo_name]}
         for classifier_name, clf in tqdm(classifiers.items(), total=len(classifiers), desc=f'Classification: {combo_name}'):
             
             best_perf = {'acc_mean':0, 'acc_std':0, 'bacc_mean':0, 'bacc_std':0, 'spec_mean':0, 'spec_std':0, 
@@ -81,12 +83,18 @@ def run_classification_experiments(data, feat_combo, classifiers, results_csv):
                         'auc_mean': auc_mean, 'auc_std': auc_std
                     }
                     
-            for metric in best_perf.keys():
-                row[f'{classifier_name}_{metric}'] = best_perf[metric]
-                
+            for metric in ['acc', 'bacc', 'spec', 'sens', 'auc']:
+                row[f'{classifier_name}_{metric}_mean'] = best_perf[f'{metric}_mean']
+                row[f'{classifier_name}_{metric}_std'] = best_perf[f'{metric}_std']
+                row_simple[f'{classifier_name}_{metric}'] = f"{best_perf[f'{metric}_mean']:.3f}±{best_perf[f'{metric}_std']:.3f}"
+
         row = pd.DataFrame(row)
+        row_simple = pd.DataFrame(row_simple)
         results = pd.concat([results, row], axis=0)
-        results.to_csv(results_csv, index=False)
+        results_simple = pd.concat([results_simple, row_simple], axis=0)
+
+    results.to_csv(results_csv, index=False)
+    results_simple.to_csv(results_csv.replace('.csv', '_simple.csv'), index=False)
 
 
 class DataPreparation:
@@ -279,12 +287,11 @@ for i in feat_elements['WM age model']['interaction']:
 # classifiers
 classifiers = {
     'Logistic Regression': LogisticRegression(random_state=42, max_iter=1000),
-    'Linear SVM': SVC(kernel="linear", C=0.025, probability=True, random_state=42),
-    'RBF SVM': SVC(gamma=2, C=1, probability=True, random_state=42),
-    'Gaussian Process': GaussianProcessClassifier(1.0 * RBF(1.0), random_state=42, n_jobs=-1),
+    'Linear SVM': SVC(kernel="linear", C=1, probability=True, random_state=42),
+    'RBF SVM': SVC(kernel='rbf', C=1, probability=True, random_state=42),
     'Decision Tree': DecisionTreeClassifier(max_depth=5, random_state=42),
     'Random Forest': RandomForestClassifier(
-        max_depth=5, n_estimators=10, max_features=1, random_state=42
+        max_depth=5, n_estimators=10, random_state=42
     ),
     'Naive Bayes': GaussianNB(),
     'Nearest Neighbors': KNeighborsClassifier(3),
