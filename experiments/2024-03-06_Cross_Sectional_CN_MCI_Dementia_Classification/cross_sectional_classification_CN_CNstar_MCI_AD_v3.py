@@ -1,5 +1,5 @@
 """ New features:
-- Include brain age gap and its interaction with chronological age as candidate features
+- Include brain age gap (BAG) and its interaction with chronological age as candidate features
 """
 
 import pdb
@@ -26,9 +26,11 @@ def run_classification_experiments(data, feat_combo, classifiers, results_csv):
         for classifier_name, clf in tqdm(classifiers.items(), total=len(classifiers), desc=f'Classification: {combo_name}'):
             
             best_perf = {'acc_mean':0, 'acc_std':0, 'bacc_mean':0, 'bacc_std':0, 'spec_mean':0, 'spec_std':0, 
-                         'sens_mean':0, 'sens_std':0, 'auc_mean':0, 'auc_std':0}
+                         'sens_mean':0, 'sens_std':0, 'auc_mean':0, 'auc_std':0, 'features':None}
             
             for feat in list_feat:
+                if len(feat) == 0:
+                    continue
                 
                 accs, baccs, specs, senss, aucs = [], [], [], [], []
                 for fold_idx in [1,2,3,4,5]:
@@ -74,13 +76,15 @@ def run_classification_experiments(data, feat_combo, classifiers, results_csv):
                         'bacc_mean': bacc_mean, 'bacc_std': bacc_std,
                         'spec_mean': spec_mean, 'spec_std': spec_std,
                         'sens_mean': sens_mean, 'sens_std': sens_std,
-                        'auc_mean': auc_mean, 'auc_std': auc_std
+                        'auc_mean': auc_mean, 'auc_std': auc_std,
+                        'features': feat,
                     }
                     
             for metric in ['acc', 'bacc', 'spec', 'sens', 'auc']:
                 row[f'{classifier_name}_{metric}_mean'] = best_perf[f'{metric}_mean']
                 row[f'{classifier_name}_{metric}_std'] = best_perf[f'{metric}_std']
                 row_simple[f'{classifier_name}_{metric}'] = f"{best_perf[f'{metric}_mean']:.3f}±{best_perf[f'{metric}_std']:.3f}"
+            row[f'{classifier_name}_best_features'] = str(best_perf['features'])
 
         row = pd.DataFrame(row)
         row_simple = pd.DataFrame(row_simple)
@@ -111,13 +115,21 @@ class DataPreparation:
                     df_model = pd.read_csv(pred_csv)
                     df_model = df_model.groupby(['dataset','subject','session','age_gt'])['age_pred'].mean().reset_index()
                     df_model = df_model.rename(columns={'age_pred': f'age_pred{col_suffix}_{fold_idx}'})
+                    df_model[f'age_pred{col_suffix}_{fold_idx}_times_chronological_age'] = df_model[f'age_pred{col_suffix}_{fold_idx}'] * df_model['age_gt']
+                    df_model[f'age_pred{col_suffix}_{fold_idx}_bag'] = df_model[f'age_pred{col_suffix}_{fold_idx}'] - df_model['age_gt']
+                    df_model[f'age_pred{col_suffix}_{fold_idx}_bag_times_chronological_age'] = df_model[f'age_pred{col_suffix}_{fold_idx}_bag'] * df_model['age_gt']
                 else:
                     tmp = pd.read_csv(pred_csv)
                     tmp = tmp.groupby(['dataset','subject','session','age_gt'])['age_pred'].mean().reset_index()
                     tmp = tmp.rename(columns={'age_pred': f'age_pred{col_suffix}_{fold_idx}'})
+                    tmp[f'age_pred{col_suffix}_{fold_idx}_times_chronological_age'] = tmp[f'age_pred{col_suffix}_{fold_idx}'] * tmp['age_gt']
+                    tmp[f'age_pred{col_suffix}_{fold_idx}_bag'] = tmp[f'age_pred{col_suffix}_{fold_idx}'] - tmp['age_gt']
+                    tmp[f'age_pred{col_suffix}_{fold_idx}_bag_times_chronological_age'] = tmp[f'age_pred{col_suffix}_{fold_idx}_bag'] * tmp['age_gt']
                     df_model = df_model.merge(tmp, on=['dataset','subject','session','age_gt'])
             df_model[f'age_pred{col_suffix}_mean'] = df_model[[f'age_pred{col_suffix}_{fold_idx}' for fold_idx in folds]].mean(axis=1)
             df_model[f'age_pred{col_suffix}_mean_times_chronological_age'] = df_model[f'age_pred{col_suffix}_mean'] * df_model['age_gt']
+            df_model[f'age_pred{col_suffix}_mean_bag'] = df_model[f'age_pred{col_suffix}_mean'] - df_model['age_gt']
+            df_model[f'age_pred{col_suffix}_mean_bag_times_chronological_age'] = df_model[f'age_pred{col_suffix}_mean_bag'] * df_model['age_gt']
             
             if i == 0:
                 df = df_model.copy()
@@ -238,8 +250,8 @@ dict_models = {
 # df = d.take_cross_sectional_samples(df)
 # df = d.over_sampling(df)
 # df = d.subject_level_splitting(df)
-# df.to_csv('experiments/2024-03-06_Cross_Sectional_CN_MCI_Dementia_Classification/data_v2.csv', index=False)
-df = pd.read_csv('experiments/2024-03-06_Cross_Sectional_CN_MCI_Dementia_Classification/data_v2.csv')
+# df.to_csv('experiments/2024-03-06_Cross_Sectional_CN_MCI_Dementia_Classification/data_v3.csv', index=False)
+df = pd.read_csv('experiments/2024-03-06_Cross_Sectional_CN_MCI_Dementia_Classification/data_v3.csv')
 
 # feature combinations
 feat_elements = {}
@@ -247,14 +259,29 @@ for model in dict_models.keys():
     col_suffix = dict_models[model]['col_suffix']
     feat_elements[model] = {
         'prediction': [
+            [],
             [f'age_pred{col_suffix}_mean'],
             [f'age_pred{col_suffix}_{i}' for i in [1,2,3,4,5]],
             [f'age_pred{col_suffix}_mean'] + [f'age_pred{col_suffix}_{i}' for i in [1,2,3,4,5]],
         ],
-        'interaction': [
+        'prediction_interaction': [
             [],
             [f'age_pred{col_suffix}_mean_times_chronological_age'],
-        ]
+            [f'age_pred{col_suffix}_{i}_times_chronological_age' for i in [1,2,3,4,5]],
+            [f'age_pred{col_suffix}_mean_times_chronological_age'] + [f'age_pred{col_suffix}_{i}_times_chronological_age' for i in [1,2,3,4,5]],
+        ],
+        'bag': [
+            [],
+            [f'age_pred{col_suffix}_mean_bag'],
+            [f'age_pred{col_suffix}_{i}_bag' for i in [1,2,3,4,5]],
+            [f'age_pred{col_suffix}_mean_bag'] + [f'age_pred{col_suffix}_{i}_bag' for i in [1,2,3,4,5]],
+        ],
+        'bag_interaction': [
+            [],
+            [f'age_pred{col_suffix}_mean_bag_times_chronological_age'],
+            [f'age_pred{col_suffix}_{i}_bag_times_chronological_age' for i in [1,2,3,4,5]],
+            [f'age_pred{col_suffix}_mean_bag_times_chronological_age'] + [f'age_pred{col_suffix}_{i}_bag_times_chronological_age' for i in [1,2,3,4,5]],
+        ],
     }
 
 feat_combo = {}
@@ -264,20 +291,31 @@ feat_combo['WM age (contaminated) only'] = feat_elements['WM age model (contamin
 feat_combo['GM age only'] = feat_elements['GM age model (ours)']['prediction']
 feat_combo['GM age (TSAN) only'] = feat_elements['GM age model (TSAN)']['prediction']
 feat_combo['chrono + WM age'] = []
-for i in feat_elements['WM age model']['interaction']:
-    for j in feat_elements['WM age model']['prediction']:
-        feat_combo['chrono + WM age'].append(['age_gt'] + i + j)
+for v in ['prediction', 'bag']:
+    for i in feat_elements['WM age model'][v]:
+        for j in feat_elements['WM age model'][f'{v}_interaction']:
+            if i + j == []:
+                continue  # there must be at least one feature from WM age model
+            feat_combo['chrono + WM age'].append(['age_gt'] + i + j)
 feat_combo['chrono + GM age'] = []
-for i in feat_elements['GM age model (ours)']['interaction']:
-    for j in feat_elements['GM age model (ours)']['prediction']:
-        feat_combo['chrono + GM age'].append(['age_gt'] + i + j)
+for v in ['prediction', 'bag']:
+    for i in feat_elements['GM age model (ours)'][v]:
+        for j in feat_elements['GM age model (ours)'][f'{v}_interaction']:
+            if i + j == []:
+                continue  # there must be at least one feature from GM age model
+            feat_combo['chrono + GM age'].append(['age_gt'] + i + j)
 feat_combo['chrono + WM age + GM age'] = []
-for i in feat_elements['WM age model']['interaction']:
-    for j in feat_elements['WM age model']['prediction']:
-        for k in feat_elements['GM age model (ours)']['interaction']:
-            for l in feat_elements['GM age model (ours)']['prediction']:
-                feat_combo['chrono + WM age + GM age'].append(['age_gt'] + i + j + k + l)
-
+for v in ['prediction', 'bag']:
+    for i in feat_elements['WM age model'][f'{v}_interaction']:
+        for j in feat_elements['WM age model'][v]:
+            if i + j == []:
+                continue  # there must be at least one feature from WM age model
+            for k in feat_elements['GM age model (ours)'][f'{v}_interaction']:
+                for l in feat_elements['GM age model (ours)'][v]:
+                    if k + l == []:
+                        continue  # there must be at least one feature from GM age model
+                    feat_combo['chrono + WM age + GM age'].append(['age_gt'] + i + j + k + l)
+                    
 # classifiers
 classifiers = {
     'Logistic Regression': LogisticRegression(random_state=42, max_iter=1000),
