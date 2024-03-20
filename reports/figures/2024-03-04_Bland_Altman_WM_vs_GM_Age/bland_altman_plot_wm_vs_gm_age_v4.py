@@ -1,11 +1,14 @@
 """ New features:
-- 
+- Fixed the problem of retrieving UKBB diagnosis label (although does not affact subplot-1 because of the "CN" criteria).
+- Replaced age_gt with age to avoid mismatch issue (although doesn not affect this script yet).
+- Used the updated cross-sectional sampling method for MCI and AD with random seed available.
 """
 import re
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 from pathlib import Path
+from tqdm import tqdm
 
 class BlandAltmanPlotWMGM:
     def __init__(self, wm_pred_root, gm_pred_root, fn_pattern, databank_dti_csv, databank_t1w_csv):
@@ -42,31 +45,29 @@ class BlandAltmanPlotWMGM:
             
             if fold_idx == 1:
                 df = pd.read_csv(csv)
-                df = df.groupby(['dataset','subject','session','age_gt'])['age_pred'].mean().reset_index()
+                df = df.groupby(['dataset','subject','session','age'])['age_pred'].mean().reset_index()
                 df = df.rename(columns={'age_pred': f'age_pred_{fold_idx}'})
             else:
                 tmp = pd.read_csv(csv)
-                tmp = tmp.groupby(['dataset','subject','session','age_gt'])['age_pred'].mean().reset_index()
+                tmp = tmp.groupby(['dataset','subject','session','age'])['age_pred'].mean().reset_index()
                 tmp = tmp.rename(columns={'age_pred': f'age_pred_{fold_idx}'})
-                df = df.merge(tmp, on=['dataset','subject','session','age_gt'])
+                df = df.merge(tmp, on=['dataset','subject','session','age'])
         df['age_pred_mean'] = df[['age_pred_1', 'age_pred_2', 'age_pred_3', 'age_pred_4', 'age_pred_5']].mean(axis=1)
-        return df[['dataset','subject','session','age_gt','age_pred_mean']].copy()
+        return df[['dataset','subject','session','age','age_pred_mean']].copy()
     
     def collect_diagnosis(self, df, databank):
-        df['diagnosis'] = df.apply(lambda row: databank.loc[
-            (databank['dataset'] == row['dataset']) &
-            (databank['subject'] == row['subject']) &
-            ((databank['session'] == row['session']) | (databank['session'].isnull())),
-            'diagnosis_simple'].values[0], axis=1)
+        df['diagnosis'] = None
+        for i, row in tqdm(df.iterrows(), total=len(df.index), desc='Retrieve diagnosis information'):
+            loc_filter = (databank['dataset'] == row['dataset']) & (databank['subject'] == row['subject']) & ((databank['session'] == row['session']) | (databank['session'].isnull()))
+            if row['dataset'] in ['UKBB']:
+                control_label = databank.loc[loc_filter, 'control_label'].values[0]
+                df.loc[i, 'diagnosis'] = 'normal' if control_label == 1 else None
+            else:
+                df.loc[i, 'diagnosis'] = databank.loc[loc_filter, 'diagnosis_simple'].values[0]
+
         return df
     
-    def filter_dataframe(self, df, age_min=45, age_max=90, list_diagnosis=['normal', 'MCI', 'dementia']):
-        df = df.loc[(df['age_gt']>=age_min)& 
-                    (df['age_gt']<=age_max)& 
-                    (df['diagnosis'].isin(list_diagnosis)), ]
-        return df
-    
-    def prepare_dataframe_for_bland_altman_plot(self):
+    def prepare_dataframe_for_bland_altman_plot(self, random_seed=42):
         wm_pred_csvs = self.find_pred_csvs(self.wm_pred_root, self.fn_pattern)
         gm_pred_csvs = self.find_pred_csvs(self.gm_pred_root, self.fn_pattern)
         
@@ -75,65 +76,58 @@ class BlandAltmanPlotWMGM:
         
         df_wm = self.collect_diagnosis(df_wm, self.databank_dti)
         df_gm = self.collect_diagnosis(df_gm, self.databank_t1w)
-
-        df_wm = self.filter_dataframe(df_wm)
-        df_gm = self.filter_dataframe(df_gm)
-        
+    
         df = df_wm.merge(df_gm[['dataset','subject','session','age_pred_mean']], on=['dataset','subject','session'], suffixes=('_wm', '_gm'))
         df['diff'] = df['age_pred_mean_wm'] - df['age_pred_mean_gm']
         df['mean'] = (df['age_pred_mean_wm'] + df['age_pred_mean_gm']) / 2
         
-        df['Category'] = None
-        df['dsubj'] = df['dataset'] + '_' + df['subject']
-        # first session of the disease-free subjects (with at least one follow-up session)
-        for subj in df.loc[df['diagnosis']=='normal', 'dsubj'].unique():
-            if (len(df.loc[df['dsubj']==subj, 'diagnosis'].unique()) == 1) and (len(df.loc[df['dsubj']==subj, 'age_gt'].unique()) >= 2):
-                df.loc[(df['dsubj'] == subj) & 
-                       (df['age_gt'] == df.loc[df['dsubj'] == subj, 'age_gt'].min()), 'Category'] = 'Earliest sample of CN subjects (who stayed CN in all follow-ups)'
+        # split into four categories: CN, CN*, MCI, AD
+        df['subj'] = df['dataset'] + '_' + df['subject']
+        df['category'] = None
+        filter_age = df['age'].between(45, 90)
+
+        # CN* (current CN, later MCI/AD)
+        for subj in df.loc[filter_age, 'subj'].unique():
+            rows_subj = df.loc[df['subj']==subj, ].copy()
+            rows_subj = rows_subj.sort_values(by='age')
+            for i in range(len(rows_subj.index)-1):
+                if (rows_subj.iloc[i]['diagnosis'] == 'normal') & (rows_subj.iloc[i+1]['diagnosis'] in ['MCI', 'dementia']):
+                    df.loc[(df['subj'] == subj) & (df['age'] == rows_subj.iloc[i]['age']), 'category'] = 'CN*'
+        
+        # CN (first session of subjects who stayed CN for at least two sessions)
+        for subj in df.loc[filter_age & (df['diagnosis']=='normal'), 'subj'].unique():
+            if (len(df.loc[df['subj']==subj, 'diagnosis'].unique()) == 1) and (len(df.loc[df['subj']==subj, 'age'].unique()) >= 2):
+                df.loc[(df['subj']==subj) & (df['age']==df.loc[df['subj']==subj,'age'].min()), 'category'] = 'CN'
                 continue
-        # session after which the subject converted to MCI or dementia
-        for subj in df.loc[df['diagnosis'].isin(['MCI', 'dementia']), 'dsubj'].unique():
-            rows_subj = df.loc[df['dsubj']==subj, ].copy()
-            if 'normal' in rows_subj['diagnosis'].values:
-                rows_subj = rows_subj.sort_values(by='age_gt')
-                for i in range(len(rows_subj.index)-1):
-                    if (rows_subj.iloc[i]['diagnosis'] == 'normal') & (rows_subj.iloc[i+1]['diagnosis'] in ['MCI', 'dementia']):
-                        df.loc[(df['dsubj'] == subj) & 
-                               (df['age_gt'] == rows_subj.iloc[i]['age_gt']), 'Category'] = 'CN subjects (converted to MCI/dementia in the next follow-up)'
-                        break
-        # the last session of the MCI subjects
-        for subj in df.loc[df['diagnosis']=='MCI', 'dsubj'].unique():
-            df.loc[(df['dsubj'] == subj) &
-                   (df['age_gt'] == df.loc[(df['dsubj'] == subj)&(df['diagnosis']=='MCI'), 'age_gt'].max()), 'Category'] = 'Last sample of MCI subjects'
-        # the last session of the dementia subjects
-        for subj in df.loc[df['diagnosis']=='dementia', 'dsubj'].unique():
-            df.loc[(df['dsubj'] == subj) &
-                   (df['age_gt'] == df.loc[(df['dsubj'] == subj)&(df['diagnosis']=='dementia'), 'age_gt'].max()), 'Category'] = 'Last sample of dementia subjects'
-        df.to_csv('reports/figures/2024-03-04_Bland_Altman_WM_vs_GM_Age/tmp.csv', index=False)  # during development
+
+        # MCI
+        for subj in df.loc[filter_age & (df['diagnosis']=='MCI'), 'subj'].unique():
+            sampled_row = df.loc[filter_age & (df['subj']==subj) & (df['diagnosis']=='MCI'),].sample(n=1, random_state=random_seed)
+            df.loc[sampled_row.index, 'category'] = 'MCI'
+
+        # AD
+        for subj in df.loc[filter_age & (df['diagnosis']=='dementia'), 'subj'].unique():
+            sampled_row = df.loc[filter_age & (df['subj']==subj) & (df['diagnosis']=='dementia'),].sample(n=1, random_state=random_seed)
+            df.loc[sampled_row.index, 'category'] = 'AD'
+            
+        df = df.loc[filter_age & df['category'].notna(),]
+        # df.to_csv('reports/figures/2024-03-04_Bland_Altman_WM_vs_GM_Age/tmp.csv', index=False)  # during development
         
         return df
 
-    def make_bland_altman_plot(self, png, csv='reports/figures/2024-03-04_Bland_Altman_WM_vs_GM_Age/tmp.csv'):
+    def make_bland_altman_plot(self, png, random_seed=42, csv='reports/figures/2024-03-04_Bland_Altman_WM_vs_GM_Age/tmp.csv'):
         
         if Path(csv).is_file():
             print('Loading existing csv file for Bland-Altman plot...')
             df = pd.read_csv(csv)
         else:
             print('Preparing dataframe for Bland-Altman plot...')
-            df = self.prepare_dataframe_for_bland_altman_plot()
-        
-        df = df.dropna(subset=['Category'])
-        dict_brief_text = {
-            'Earliest sample of CN subjects (who stayed CN in all follow-ups)': 'CN',
-            'CN subjects (converted to MCI/dementia in the next follow-up)': 'CN*',
-            'Last sample of MCI subjects': 'MCI',
-            'Last sample of dementia subjects': 'dementia',
-        }
+            df = self.prepare_dataframe_for_bland_altman_plot(random_seed=random_seed)
         
         fig, axes = plt.subplots(1, 4, figsize=(6.5, 2.5), sharex=True, sharey=True)
         
-        for i,cat in enumerate(dict_brief_text.keys()):
-            data = df.loc[df['Category']==cat, ]
+        for i,cat in enumerate(['CN', 'CN*', 'MCI', 'AD']):
+            data = df.loc[df['category']==cat, ]
             # Exclude outliers using IQR
             q1 = data['diff'].quantile(0.25)
             q3 = data['diff'].quantile(0.75)
@@ -174,7 +168,7 @@ class BlandAltmanPlotWMGM:
 
             axes[i].text(
                 0.05, 0.95,
-                dict_brief_text[cat], 
+                cat, 
                 fontsize=self.fontsize['title'],
                 fontfamily=self.fontfamily,
                 transform=axes[i].transAxes,
@@ -202,4 +196,5 @@ if __name__ == '__main__':
         databank_dti_csv='/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti_v2.csv', 
         databank_t1w_csv='/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_t1w_v2.csv',
     )
-    b.make_bland_altman_plot(png='reports/figures/2024-03-04_Bland_Altman_WM_vs_GM_Age/figs/bland_altman_wm_vs_gm_age_v3.png')
+    for seed in [0, 4, 6, 25, 42]:
+        b.make_bland_altman_plot(png=f'reports/figures/2024-03-04_Bland_Altman_WM_vs_GM_Age/figs/bland_altman_wm_vs_gm_age_v4_seed_{seed}.png', random_seed=seed)
