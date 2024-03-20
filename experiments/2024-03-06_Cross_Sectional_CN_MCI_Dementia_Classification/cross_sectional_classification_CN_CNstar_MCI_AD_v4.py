@@ -10,7 +10,9 @@ We should expect approximately the following number:
     len(df.loc[df['age'].between(45,90), 'ses'].unique())
     5675
 
-- Use improved cross-sectional selection criteria
+- Use improved cross-sectional selection criteria: 
+    we don't care if there is overlapping subjects between AD/MCI category,
+    because we only do binary classification between CN and AD/MCI respectively.
 """
 
 import pdb
@@ -173,20 +175,18 @@ class DataPreparation:
                     df.loc[(df['subj'] == subj) & (df['age'] == rows_subj.iloc[i]['age']), 'category'] = 'CN*'
         # CN
         for subj in df.loc[filter_age & (df['diagnosis']=='normal'), 'subj'].unique():
-            if subj in df.loc[df['category'].notna(), 'subj'].unique():
-                continue
-            if len(df.loc[df['subj']==subj, 'diagnosis'].unique()) == 1:  # if 'normal' is the only diagnosis in history = "very healthy"
+            if len(df.loc[df['subj']==subj, 'diagnosis'].unique()) == 1:  # if 'normal' is the only diagnosis in history ~= "very healthy"
                 sampled_row = df.loc[filter_age & (df['subj']==subj),].sample(n=1, random_state=random_seed)
                 df.loc[sampled_row.index, 'category'] = 'CN'
         # MCI
         for subj in df.loc[filter_age & (df['diagnosis']=='MCI'), 'subj'].unique():
-            if subj in df.loc[df['category'].notna(), 'subj'].unique():
+            if subj in df.loc[df['category']=='CN', 'subj'].unique():  # skip if already the subject is already used in "CN"
                 continue
             sampled_row = df.loc[filter_age & (df['subj']==subj) & (df['diagnosis']=='MCI'),].sample(n=1, random_state=random_seed)
             df.loc[sampled_row.index, 'category'] = 'MCI'
         # AD
         for subj in df.loc[filter_age & (df['diagnosis']=='dementia'), 'subj'].unique():
-            if subj in df.loc[df['category'].notna(), 'subj'].unique():
+            if subj in df.loc[df['category']=='CN', 'subj'].unique():  # skip if already the subject is already used in "CN"
                 continue
             sampled_row = df.loc[filter_age & (df['subj']==subj) & (df['diagnosis']=='dementia'),].sample(n=1, random_state=random_seed)
             df.loc[sampled_row.index, 'category'] = 'AD'
@@ -200,6 +200,34 @@ class DataPreparation:
             
         return df
         
+    # def draw_subset_matching_age_distribution(self, df, cat_major, cat_minor, num_per_cat=None, max_attempts=10000):
+    #     """ Draw num_per_cat samples each from categories cat_major and cat_minor in a for loop.
+    #     Compute the average distance of the age (sorted) between the two categories. 
+    #     Return the subset that has the smallest distance.
+    #     """
+    #     if num_per_cat is None:
+    #         num_per_cat = df['category'].value_counts()[cat_minor]
+
+    #     best_seed = None
+    #     best_distance = float('inf')
+
+    #     for seed in range(max_attempts):
+    #         df_major = df.loc[df['category']==cat_major,].sample(n=num_per_cat, replace=False, random_state=seed)
+    #         df_minor = df.loc[df['category']==cat_minor,].sample(n=num_per_cat, replace=False, random_state=seed)
+    #         distance = sum((df_major['age'].sort_values().values - df_minor['age'].sort_values().values)**2)/num_per_cat
+    #         if distance < best_distance:
+    #             best_distance = distance
+    #             best_seed = seed
+        
+    #     df_major = df.loc[df['category']==cat_major,].sample(n=num_per_cat, replace=False, random_state=best_seed)
+    #     df_minor = df.loc[df['category']==cat_minor,].sample(n=num_per_cat, replace=False, random_state=best_seed)
+    #     df = pd.concat([df_major, df_minor], axis=0)
+    #     print(f"Best seed: {best_seed}, Best distance: {best_distance}\n")
+    #     for c in df['category'].unique():
+    #         print(f"--------------{c}--------------")
+    #         print(df.loc[df['category']==c, 'age'].describe())
+    #     return df
+
     def over_sampling(self, df, column_class='category', random_state=0):
         """ over-sampling the minority classes to balance the dataset """
         num_max = df[column_class].value_counts().max()
