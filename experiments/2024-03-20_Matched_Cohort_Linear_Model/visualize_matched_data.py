@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import matplotlib.patches as mpatches
 import matplotlib.lines as mlines
+from scipy.stats import wilcoxon
 
 # hyperparameters for plotting
 xlim = [57, 96]
@@ -73,9 +74,21 @@ for i, cat in enumerate(['CN', 'CN*', 'MCI', 'AD']):
     upper_bound = q3 + 1.5 * iqr
     data = data.loc[(data['wm_gm_diff'] >= lower_bound) & (data['wm_gm_diff'] <= upper_bound)]
     
-    # Compute mean and std
+    # mean and std
     y_mean = data['wm_gm_diff'].mean()
     y_std = data['wm_gm_diff'].std()
+    
+    # p-value from Wilcoxon signed-rank test
+    res = wilcoxon(x=data['wm_gm_diff'])
+    pvalue = res.pvalue
+    if pvalue > 0.001:
+        text_pvalue = f"p-value≈{pvalue:.3f}"
+    elif pvalue <= 0.001 and pvalue > 0.0001:
+        text_pvalue = "p-value<0.001"
+    elif pvalue < 0.0001:
+        text_pvalue = "p-value≪0.001"
+    else:
+        text_pvalue = "p-value=???"
     
     sns.scatterplot(data=data, x='wm_gm_mean', y='wm_gm_diff',
         s=marker_size, linewidth=marker_linewidth, 
@@ -94,6 +107,8 @@ for i, cat in enumerate(['CN', 'CN*', 'MCI', 'AD']):
     ax.set_xlim(xlim[0], xlim[1])
     ax.set_ylim(ylim_ba[0], ylim_ba[1])
     ax.text(0.05, 0.95, cat, fontsize=fontsize, fontfamily=fontfamily,
+        transform=ax.transAxes, verticalalignment='top')
+    ax.text(0.05, 0.08, text_pvalue, fontsize=fontsize, fontfamily=fontfamily,
         transform=ax.transAxes, verticalalignment='top')
     ax.set_xlabel('')
     ax.set_xticks(xticks)

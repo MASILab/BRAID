@@ -6,6 +6,7 @@ models/*/runs
 models/*/sanity_check
 
 # Data
+experiments/2024-03-20_Matched_Cohort_Linear_Model/data_matched_cohort.csv
 reports/figures/2024-03-12_Raincloud_plot_Diagnosis_Group_Comparison/figs
 experiments/2024-03-06_Cross_Sectional_CN_MCI_Dementia_Classification/*.csv
 experiments/2024-03-06_Cross_Sectional_CN_MCI_Dementia_Classification/*.xlsx
