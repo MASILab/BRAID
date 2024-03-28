@@ -11,10 +11,8 @@
 
 import pandas as pd
 from scipy.stats import wilcoxon, ranksums
-from functions.exclude_outliers import exclude_outliers
 
 df = pd.read_csv('experiments/2024-03-20_Matched_Cohort_Linear_Model/data_matched_cohort.csv')
-df = exclude_outliers(df)
 
 for cat in df['category_criteria_1'].unique():
     data = df[df['category_criteria_1'] == cat]

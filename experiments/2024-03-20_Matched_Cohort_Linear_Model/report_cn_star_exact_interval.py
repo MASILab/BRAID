@@ -6,10 +6,8 @@ from tqdm import tqdm
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-from functions.exclude_outliers import exclude_outliers
 
 df = pd.read_csv('experiments/2024-03-20_Matched_Cohort_Linear_Model/data_matched_cohort.csv')
-df = exclude_outliers(df)
 subj_cn_star = df.loc[df['category_criteria_1']=='CN*', 'subj'].unique()
 
 # age and diagnosis information of all sessions

@@ -3,6 +3,7 @@ import re
 import pandas as pd
 from pathlib import Path
 from tqdm import tqdm
+from functions.exclude_outliers import exclude_outliers
 
 class WMGMAgeLoader:
     def __init__(self, wm_pred_root, gm_pred_root, fn_pattern, databank_dti_csv):
@@ -166,5 +167,6 @@ b = WMGMAgeLoader(
     databank_dti_csv='/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti_v2.csv',
 )
 df = b.collect_both_wmgm_and_assign_category()
+df = exclude_outliers(df)
 df_matched = match_cohort(df, category_col='category_criteria_1', search_order=['CN*', 'AD', 'MCI', 'CN'], age_diff_threshold=1)
 df_matched.to_csv('experiments/2024-03-20_Matched_Cohort_Linear_Model/data_matched_cohort.csv', index=False)
