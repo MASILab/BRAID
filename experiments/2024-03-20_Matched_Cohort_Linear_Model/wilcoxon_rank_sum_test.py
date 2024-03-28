@@ -11,19 +11,13 @@
 
 import pandas as pd
 from scipy.stats import wilcoxon, ranksums
+from functions.exclude_outliers import exclude_outliers
 
 df = pd.read_csv('experiments/2024-03-20_Matched_Cohort_Linear_Model/data_matched_cohort.csv')
+df = exclude_outliers(df)
 
 for cat in df['category_criteria_1'].unique():
     data = df[df['category_criteria_1'] == cat]
-    
-    # Exclude outliers using IQR
-    q1 = data['wm_gm_diff'].quantile(0.25)
-    q3 = data['wm_gm_diff'].quantile(0.75)
-    iqr = q3 - q1
-    lower_bound = q1 - 1.5 * iqr
-    upper_bound = q3 + 1.5 * iqr
-    data = data.loc[(data['wm_gm_diff'] >= lower_bound) & (data['wm_gm_diff'] <= upper_bound)]
     
     print("--------------------Wilcoxon signed-rank test--------------------")
     res = wilcoxon(x=data['wm_gm_diff'])

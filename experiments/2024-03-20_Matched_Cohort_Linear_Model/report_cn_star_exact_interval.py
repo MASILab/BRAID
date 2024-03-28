@@ -6,8 +6,10 @@ from tqdm import tqdm
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+from functions.exclude_outliers import exclude_outliers
 
 df = pd.read_csv('experiments/2024-03-20_Matched_Cohort_Linear_Model/data_matched_cohort.csv')
+df = exclude_outliers(df)
 subj_cn_star = df.loc[df['category_criteria_1']=='CN*', 'subj'].unique()
 
 # age and diagnosis information of all sessions
@@ -66,11 +68,11 @@ ax = sns.boxplot(data = data, y='interval',
     medianprops=dict(linewidth=1.5, color='tab:orange'),
     ax=ax, native_scale=True)
 
-ax.text(0.02, 0.98, f'interval: {mean:.2f} ± {std:.2f} years',
+ax.text(0.02, 0.98, f'interval: {mean:.1f} ± {std:.1f} years',
     fontsize=9, fontfamily='DejaVu Sans',
     transform=ax.transAxes, verticalalignment='top')
 
 ax.tick_params(labelsize=9, which='both')
-ax.set_ylabel('interval between CN* and MCI/AD sessions (year)', fontsize=9, fontfamily='DejaVu Sans')
+ax.set_ylabel('interval between CN* and MCI/AD sessions (years)', fontsize=9, fontfamily='DejaVu Sans')
 
-fig.savefig('experiments/2024-03-20_Matched_Cohort_Linear_Model/figs/raincloud_distribution_cn_star_interval_v1.png', dpi=300, bbox_inches='tight')
+fig.savefig('experiments/2024-03-20_Matched_Cohort_Linear_Model/figs/raincloud_distribution_cn_star_interval_v2.png', dpi=300, bbox_inches='tight')

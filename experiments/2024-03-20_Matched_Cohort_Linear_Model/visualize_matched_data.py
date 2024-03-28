@@ -8,6 +8,7 @@ import matplotlib.gridspec as gridspec
 import matplotlib.patches as mpatches
 import matplotlib.lines as mlines
 from scipy.stats import wilcoxon
+from functions.exclude_outliers import exclude_outliers
 
 # hyperparameters for plotting
 xlim = [57, 96]
@@ -28,6 +29,7 @@ alpha = {
 color_hline_ba = 'limegreen'
 
 df = pd.read_csv('experiments/2024-03-20_Matched_Cohort_Linear_Model/data_matched_cohort.csv')
+df = exclude_outliers(df)
 
 fig = plt.figure(figsize=(6.5, 5), tight_layout=True)
 gs = gridspec.GridSpec(4, 4, wspace=0, hspace=0.5, height_ratios=[1, 0.05, 2, 0.05])
@@ -65,14 +67,6 @@ ax.axis('off')
 for i, cat in enumerate(['CN', 'CN*', 'MCI', 'AD']):
     data = df.loc[df['category_criteria_1']==cat, ]
     ax = fig.add_subplot(gs[2, i])
-    
-    # Exclude outliers using IQR
-    q1 = data['wm_gm_diff'].quantile(0.25)
-    q3 = data['wm_gm_diff'].quantile(0.75)
-    iqr = q3 - q1
-    lower_bound = q1 - 1.5 * iqr
-    upper_bound = q3 + 1.5 * iqr
-    data = data.loc[(data['wm_gm_diff'] >= lower_bound) & (data['wm_gm_diff'] <= upper_bound)]
     
     # mean and std
     y_mean = data['wm_gm_diff'].mean()
@@ -132,4 +126,4 @@ ax.legend(handles=[line1, line2], loc='upper center', fontsize=fontsize, frameon
 ax.axis('off')
 
 # # Save figure
-fig.savefig('experiments/2024-03-20_Matched_Cohort_Linear_Model/figs/blant_altman_matched_cohort_v2.png', dpi=600)
+fig.savefig('experiments/2024-03-20_Matched_Cohort_Linear_Model/figs/blant_altman_matched_cohort_v3.png', dpi=600)
