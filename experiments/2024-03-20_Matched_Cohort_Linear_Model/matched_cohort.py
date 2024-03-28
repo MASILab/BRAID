@@ -100,8 +100,9 @@ def match_cohort(df, category_col='category_criteria_1', search_order=['CN*', 'A
     # candidate pool and selected samples
     dfs_pool = {c: df.loc[df[category_col]==c, ].copy() for c in search_order}
     dfs_matched = {c: pd.DataFrame() for c in search_order}
-    
-    for i, row in tqdm(dfs_pool[search_order[0]].iterrows(), total=len(dfs_pool[search_order[0]].index), desc=f'Matching cohorts with {search_order[0]}'):
+    match_id = 0
+
+    for _, row in tqdm(dfs_pool[search_order[0]].iterrows(), total=len(dfs_pool[search_order[0]].index), desc=f'Matching cohorts with {search_order[0]}'):
         used_subjs = []
         for c in search_order:
             if len(dfs_matched[c].index) == 0:
@@ -127,10 +128,12 @@ def match_cohort(df, category_col='category_criteria_1', search_order=['CN*', 'A
                 used_subjs.append(tmp_matched[c]['subj'])
         
         if all([tmp_matched[c] is not None for c in search_order[1:]]):  # this sample has been matched in all categories
-            for c in search_order[1:]:
-                dfs_matched[c] = pd.concat([dfs_matched[c], tmp_matched[c].to_frame().T])
-            dfs_matched[search_order[0]] = pd.concat([dfs_matched[search_order[0]], row.to_frame().T])
-    
+            for c in search_order:
+                r = row.to_frame().T if c==search_order[0] else tmp_matched[c].to_frame().T
+                r['match_id'] = match_id
+                dfs_matched[c] = pd.concat([dfs_matched[c], r])                
+            match_id += 1
+            
     # sanity check
     for i, c in enumerate(search_order):
         for j in range(i, len(search_order)):
