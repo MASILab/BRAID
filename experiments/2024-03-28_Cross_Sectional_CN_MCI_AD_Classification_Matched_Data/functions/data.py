@@ -1,4 +1,3 @@
-import re
 import random
 import seaborn as sns
 import pandas as pd
@@ -147,14 +146,18 @@ class DataPreparation:
                     interval = rows_subj.iloc[i+1]['age'] - rows_subj.iloc[i]['age']
                     df.loc[(df['subj']==subj)&(df['age']==rows_subj.iloc[i+1]['age']), f'age_pred{col_suffix}_mean_bag_change_rate'] = (delta_bag / interval) if interval > 0 else None
         
-        # (chronological age*BAG) and (chronological age*BAG change rate)
+        # interactions (chronological age/sex with BAG/BAG change rate)
         for model in self.dict_models.keys():
             col_suffix = self.dict_models[model]['col_suffix']
             for fold_idx in [1,2,3,4,5]:
                 df[f'age_pred{col_suffix}_{fold_idx}_bag_multiply_age'] = df[f'age_pred{col_suffix}_{fold_idx}_bag'] * df['age']
                 df[f'age_pred{col_suffix}_{fold_idx}_bag_change_rate_multiply_age'] = df[f'age_pred{col_suffix}_{fold_idx}_bag_change_rate'] * df['age']
+                df[f'age_pred{col_suffix}_{fold_idx}_bag_multiply_sex'] = df[f'age_pred{col_suffix}_{fold_idx}_bag'] * df['sex']
+                df[f'age_pred{col_suffix}_{fold_idx}_bag_change_rate_multiply_sex'] = df[f'age_pred{col_suffix}_{fold_idx}_bag_change_rate'] * df['sex']
             df[f'age_pred{col_suffix}_mean_bag_multiply_age'] = df[f'age_pred{col_suffix}_mean_bag'] * df['age']
             df[f'age_pred{col_suffix}_mean_bag_change_rate_multiply_age'] = df[f'age_pred{col_suffix}_mean_bag_change_rate'] * df['age']
+            df[f'age_pred{col_suffix}_mean_bag_multiply_sex'] = df[f'age_pred{col_suffix}_mean_bag'] * df['sex']
+            df[f'age_pred{col_suffix}_mean_bag_change_rate_multiply_sex'] = df[f'age_pred{col_suffix}_mean_bag_change_rate'] * df['sex']
             
         return df
     
@@ -263,7 +266,7 @@ def roster_brain_age_models():
     dict_models = {
         'WM age model': {
             'prediction_root': 'models/2024-02-07_ResNet101_BRAID_warp/predictions',
-            'col_suffix': '_wm_age',
+            'col_suffix': '_wm_age_purified',
             },
         'GM age model (ours)': {
             'prediction_root': 'models/2024-02-07_T1wAge_ResNet101/predictions',
@@ -273,9 +276,14 @@ def roster_brain_age_models():
             'prediction_root': 'models/2023-12-22_ResNet101/predictions',
             'col_suffix': '_wm_age_contaminated'
             },
-        'GM age model (TSAN)': {
-            'prediction_root': 'models/2024-02-12_TSAN_first_stage/predictions',
-            'col_suffix': '_gm_age_tsan'
-            },
     }
     return dict_models
+
+def roster_feature_combinations(df):
+    feat_combo = {'basic (chronological age + sex)': ['age', 'sex']}
+    feat_combo['basic + WM age (purified)'] = ['age', 'sex'] + [col for col in df.columns if '_wm_age_purified' in col]
+    feat_combo['basic + GM age'] = ['age', 'sex'] + [col for col in df.columns if '_gm_age_ours' in col]
+    feat_combo['basic + WM age (contaminated)'] = ['age', 'sex'] + [col for col in df.columns if '_wm_age_contaminated' in col]
+    feat_combo['basic + WM age (purified) + GM age'] = ['age', 'sex'] + [col for col in df.columns if '_wm_age_purified' in col] + [col for col in df.columns if '_gm_age_ours' in col]
+    
+    return feat_combo
