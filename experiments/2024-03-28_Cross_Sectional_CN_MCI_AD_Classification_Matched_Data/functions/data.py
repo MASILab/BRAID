@@ -1,9 +1,12 @@
 import re
+import random
 import seaborn as sns
 import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
 from tqdm import tqdm
+from warnings import simplefilter
+simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 
 class DataPreparation:
     def __init__(self, dict_models, databank_csv):
@@ -157,7 +160,7 @@ class DataPreparation:
     
     def draw_histograms_columns(self, df, cols_exclude=['dataset','subject','session'], 
                                 save_dir='experiments/2024-03-28_Cross_Sectional_CN_MCI_AD_Classification_Matched_Data/figs/histograms'):
-        """ Draw histograms for all columns in the dataframe.
+        """ Draw histograms for all columns in the dataframe except for the ones in cols_exclude.
         """
         
         cols_plot = [col for col in df.columns if col not in cols_exclude]
@@ -170,36 +173,109 @@ class DataPreparation:
             sns.histplot(data=df, x=col, ax=ax)
             fig.savefig(save_dir / f"{col}.png")
             plt.close('all')
+
+    def match_data(self, df, category_col, match_order, age_diff_threshold=1):
+        """ Use greedy algorithm to match data samples from the majority category to the minority category.
+        match_order: list of categories in the order of matching. The first category is the minority category.
+        """
+        # candidate pool and selected samples
+        dfs_pool = {c: df.loc[df[category_col]==c, ].copy() for c in match_order}
+        dfs_matched = {c: pd.DataFrame() for c in match_order}
+        match_id = 0
+
+        for _, row in tqdm(dfs_pool[match_order[0]].iterrows(), total=len(dfs_pool[match_order[0]].index), desc=f'Matching cohorts with {match_order[0]}'):
+            used_subjs = []
+            for c in match_order:
+                if len(dfs_matched[c].index) == 0:
+                    continue
+                else:
+                    used_subjs += dfs_matched[c]['subj'].unique().tolist()
+
+            if row['subj'] in used_subjs:
+                continue
+
+            tmp_matched = {c: None for c in match_order[1:]}
+            for c in match_order[1:]:
+                smallest_age_diff = age_diff_threshold
+                for j, row_c in dfs_pool[c].iterrows():
+                    if (row_c['subj'] in used_subjs) or (row_c['sex']!=row['sex']):  # already used or different sex
+                        continue
+                    age_diff = abs(row['age'] - row_c['age'])
+
+                    if age_diff < smallest_age_diff:
+                        smallest_age_diff = age_diff
+                        tmp_matched[c] = row_c
+                if tmp_matched[c] is not None:
+                    used_subjs.append(tmp_matched[c]['subj'])
             
-    # def match_data(self, category_col, match_order, age_diff_threshold=1):
-    #     pass
+            if all([tmp_matched[c] is not None for c in match_order[1:]]):  # this sample has been matched in all categories
+                for c in match_order:
+                    r = row.to_frame().T if c==match_order[0] else tmp_matched[c].to_frame().T
+                    r['match_id'] = match_id
+                    dfs_matched[c] = pd.concat([dfs_matched[c], r])                
+                match_id += 1
+                
+        # sanity check
+        for i, c in enumerate(match_order):
+            for j in range(i, len(match_order)):
+                if i == j:
+                    # make sure that no repeated subjects are in the same category
+                    assert len(dfs_matched[c]['subj'].unique()) == len(dfs_matched[c].index), f"Repeated subjects in {c}"
+                else:
+                    # no overlapping subjects
+                    assert len(set(dfs_matched[c]['subj'].unique()).intersection(set(dfs_matched[match_order[j]]['subj'].unique()))) == 0, f"Overlapping subjects between {c} and {match_order[j]}"
+        
+        # report matching MAE
+        ae = []
+        for i in range(len(dfs_matched[match_order[0]].index)):
+            ae.append(sum([abs(dfs_matched[c].iloc[i]['age']-dfs_matched[match_order[0]].iloc[i]['age']) for c in match_order[1:]]) / (len(match_order)-1))
+        mae = sum(ae) / len(ae)
+        print(f"Mean absolute error: {mae:.2f} years")
+        
+        # merge into one dataframe
+        df_merge = pd.DataFrame()
+        for c in match_order:
+            df_merge = pd.concat([df_merge, dfs_matched[c]], ignore_index=True)
 
+        return df_merge
 
+    def split_data_into_k_folds(self, df, category_col, num_folds=5, fold_col='fold_idx', random_state=42):
+        """ split the dataset at the subject level for cross-validation,
+        save the fold information in a seperate column 'fold_idx'
+        """
+        assert fold_col not in df.columns, f'Column {fold_col} already exists in the dataframe'
 
+        df[fold_col] = None
 
-dict_models = {
-    'WM age model': {
-        'prediction_root': 'models/2024-02-07_ResNet101_BRAID_warp/predictions',
-        'col_suffix': '_wm_age',
-        },
-    'GM age model (ours)': {
-        'prediction_root': 'models/2024-02-07_T1wAge_ResNet101/predictions',
-        'col_suffix': '_gm_age_ours'
-        },
-    'WM age model (contaminated with GM age features)': {
-        'prediction_root': 'models/2023-12-22_ResNet101/predictions',
-        'col_suffix': '_wm_age_contaminated'
-        },
-    'GM age model (TSAN)': {
-        'prediction_root': 'models/2024-02-12_TSAN_first_stage/predictions',
-        'col_suffix': '_gm_age_tsan'
-        },
-}
+        for c in df[category_col].unique():
+            subj_category = df.loc[df[category_col]==c, 'subj'].unique().tolist()
+            random.seed(random_state)
+            random.shuffle(subj_category)
+            indices = [int(i*len(subj_category)/num_folds) for i in range(num_folds+1)]
+            
+            for i in range(num_folds):
+                df.loc[(df[category_col]==c) & df['subj'].isin(subj_category[indices[i]:indices[i+1]]), fold_col] = i+1
+        assert df[fold_col].notna().all(), f'Not all samples are assigned to a fold'
+        
+        return df
 
-d = DataPreparation(dict_models, databank_csv='/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti_v2.csv')
-df = d.load_predictions_of_all_models()
-df = d.retrieve_diagnosis_label(df)
-df = d.assign_fine_category_label(df)
-df = d.feature_engineering(df)
-df.to_csv('tmp.csv', index=False)
-d.draw_histograms_columns(df)
+def roster_brain_age_models():
+    dict_models = {
+        'WM age model': {
+            'prediction_root': 'models/2024-02-07_ResNet101_BRAID_warp/predictions',
+            'col_suffix': '_wm_age',
+            },
+        'GM age model (ours)': {
+            'prediction_root': 'models/2024-02-07_T1wAge_ResNet101/predictions',
+            'col_suffix': '_gm_age_ours'
+            },
+        'WM age model (contaminated with GM age features)': {
+            'prediction_root': 'models/2023-12-22_ResNet101/predictions',
+            'col_suffix': '_wm_age_contaminated'
+            },
+        'GM age model (TSAN)': {
+            'prediction_root': 'models/2024-02-12_TSAN_first_stage/predictions',
+            'col_suffix': '_gm_age_tsan'
+            },
+    }
+    return dict_models
