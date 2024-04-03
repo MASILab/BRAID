@@ -2,6 +2,8 @@ import random
 import seaborn as sns
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+import matplotlib.patches as mpatches
 from pathlib import Path
 from tqdm import tqdm
 from warnings import simplefilter
@@ -241,7 +243,54 @@ class DataPreparation:
             df_merge = pd.concat([df_merge, dfs_matched[c]], ignore_index=True)
 
         return df_merge
+    
+    def visualize_matched_data_histogram(self, df, category_col, save_png, xlim, xticks, ylim, yticks):
+        categories = df[category_col].unique()
+        assert len(categories) == 2, "Only support two classes for now."
+        categories = [c for c in ['CN', 'CN*', 'MCI', 'AD'] if c in categories]  # reorder
 
+        if (df['age'].max() >= xlim[1]) or (df['age'].min() <= xlim[0]):
+            print(f"Warning: current FOV does not cover all data (min: {df['age'].min()}, Max: {df['age'].max()})!")
+
+        # hyperparameters for plotting
+        fontsize = 9
+        fontfamily = 'DejaVu Sans'
+        df['sex'] = df['sex'].map({0:'female', 1:'male'})  # convert back to string
+        palette_hist = {'male': 'tab:blue', 'female': 'tab:red'}        
+        fig = plt.figure(figsize=(3.5, 1.7))
+        gs = gridspec.GridSpec(2, 2, wspace=0, hspace=0.7, height_ratios=[1, 0.05])
+        
+        for i, cat in enumerate(categories):
+            data = df.loc[df[category_col]==cat, ]
+            ax = fig.add_subplot(gs[0, i])
+            sns.histplot(data=data, x='age', hue='sex', palette=palette_hist, alpha=1, binwidth=1, multiple='stack', ax=ax, legend=False)
+            ax.set_title(f"{cat} (N={data.shape[0]})", fontsize=fontsize, fontfamily=fontfamily)
+            ax.set_xlim(xlim[0], xlim[1])
+            ax.set_ylim(ylim[0], ylim[1])
+            ax.set_xlabel('')
+            ax.set_xticks(xticks)
+            ax.set_xticklabels(xticks, fontsize=fontsize, fontfamily=fontfamily)
+
+            if i == 0:
+                ax.set_ylabel('count', fontsize=fontsize, fontfamily=fontfamily)
+                ax.set_yticks(yticks)
+                ax.set_yticklabels(yticks, fontsize=fontsize, fontfamily=fontfamily)
+            else:
+                ax.set_ylabel('')
+                ax.set_yticks([])
+                ax.set_yticklabels([])
+
+        # xlabel and legend
+        ax = fig.add_subplot(gs[1, :])
+        ax.text(0.5, 0.9, 'chronological age (years)', fontsize=fontsize, fontfamily=fontfamily, ha='center', va='center', transform=ax.transAxes)
+        patch1 = mpatches.Patch(edgecolor='black', facecolor=palette_hist['male'], label='Male')
+        patch2 = mpatches.Patch(edgecolor='black', facecolor=palette_hist['female'], label='Female')
+        ax.legend(handles=[patch1, patch2], loc='upper center', fontsize=fontsize, frameon=False, ncol=2, bbox_to_anchor=(0.5, 0.5))
+        ax.axis('off')
+
+        # Save figure
+        fig.savefig(save_png, dpi=600, bbox_inches='tight')
+    
     def split_data_into_k_folds(self, df, category_col, num_folds=5, fold_col='fold_idx', random_state=42):
         """ split the dataset at the subject level for cross-validation,
         save the fold information in a seperate column 'fold_idx'
