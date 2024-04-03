@@ -1,3 +1,4 @@
+import multiprocessing
 import pandas as pd
 from tqdm import tqdm
 from sklearn.preprocessing import MinMaxScaler
@@ -9,20 +10,18 @@ from sklearn.metrics import accuracy_score, confusion_matrix, roc_auc_score
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import SimpleImputer, IterativeImputer, KNNImputer
 from sklearn.svm import LinearSVC
-from sklearn.feature_selection import SelectFromModel
+from sklearn.feature_selection import SelectFromModel, SequentialFeatureSelector
 
 def roster_classifiers():
     classifiers = {
-        'Logistic Regression': LogisticRegression(random_state=42, max_iter=1000),
-        'Linear SVM': SVC(kernel="linear", C=1, probability=True, random_state=42),
-        'Decision Tree': DecisionTreeClassifier(max_depth=5, random_state=42),
-        'Random Forest': RandomForestClassifier(
-            max_depth=5, n_estimators=10, random_state=42
-        ),
+        'Logistic Regression': (LogisticRegression, {'random_state': 42, 'max_iter': 1000}),
+        'Linear SVM': (SVC, {'kernel': "linear", 'C': 1, 'probability': True, 'random_state': 42}),
+        'Decision Tree': (DecisionTreeClassifier, {'max_depth': 5, 'random_state': 42}),
+        'Random Forest': (RandomForestClassifier, {'max_depth': 5, 'n_estimators': 10, 'random_state': 42}),
     }
     return classifiers
 
-def run_classification_experiments(data, feat_combo, classifiers, results_csv, num_folds=5, impute_method='mean'):
+def run_classification_experiments(data, feat_combo, classifiers, results_csv, num_folds=5, impute_method='mean', feature_selection_method='backward'):
     # dataframe to store results
     results_detail = pd.DataFrame()
     results_simple = pd.DataFrame()
@@ -32,20 +31,22 @@ def run_classification_experiments(data, feat_combo, classifiers, results_csv, n
         row_detail = {'Features': [combo_name]}
         row_simple = {'Features': [combo_name]}
 
-        for classifier_name, clf in tqdm(classifiers.items(), total=len(classifiers), desc=f'Classification: {combo_name}'):            
+        for classifier_name in tqdm(classifiers.keys(), total=len(classifiers), desc=f'Classification: {combo_name}'):
+            model_class, kwargs = classifiers[classifier_name]
             accs, specs, senss, aucs = [], [], [], []
+
             for fold_idx in range(1, num_folds+1):
                 X_train = data.loc[data['fold_idx']!=fold_idx, list_features].values
                 y_train = data.loc[data['fold_idx']!=fold_idx, 'category'].values
                 X_test = data.loc[data['fold_idx']==fold_idx, list_features].values
                 y_test = data.loc[data['fold_idx']==fold_idx, 'category'].values
                 
-                # scaling
+                # min-max normalization
                 scaling = MinMaxScaler(feature_range=(-1,1)).fit(X_train)
                 X_train = scaling.transform(X_train)
                 X_test = scaling.transform(X_test)
                 
-                # Impute missing values
+                # impute missing values
                 if impute_method == 'mean':
                     imputer = SimpleImputer(strategy='mean')
                 elif impute_method == 'median':
@@ -61,12 +62,19 @@ def run_classification_experiments(data, feat_combo, classifiers, results_csv, n
                 X_test = imputer.transform(X_test)
 
                 # feature selection
-                lsvc = LinearSVC(C=0.01, penalty="l1", dual=False).fit(X_train, y_train)
-                model = SelectFromModel(lsvc, threshold='median', prefit=True)
-                X_train = model.transform(X_train)
-                X_test = model.transform(X_test)
+                if feature_selection_method == 'backward':
+                    clf = model_class(**kwargs)
+                    selector = SequentialFeatureSelector(estimator=clf, n_features_to_select='auto', tol=0, direction=feature_selection_method, scoring='roc_auc', n_jobs=multiprocessing.cpu_count())
+                    selector.fit(X_train, y_train)
+                    X_train = selector.transform(X_train)
+                    X_test = selector.transform(X_test)
+                elif feature_selection_method == None:
+                    pass
+                else:
+                    raise ValueError(f'Feature selection method {feature_selection_method} not investigated')
 
                 # classification
+                clf = model_class(**kwargs)
                 clf.fit(X_train, y_train)
                 y_pred = clf.predict(X_test)
 

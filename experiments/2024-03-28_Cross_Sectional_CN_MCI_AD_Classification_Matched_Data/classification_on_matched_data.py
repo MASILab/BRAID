@@ -19,7 +19,10 @@ data =  d.match_data(df, category_col='category_criteria_2', match_order=['AD', 
 data = d.split_data_into_k_folds(data, category_col='category_criteria_2')
 data['category'] = data['category_criteria_2'].map({'CN': 0, 'AD': 1})
 data.to_csv('experiments/2024-03-28_Cross_Sectional_CN_MCI_AD_Classification_Matched_Data/data/data_CN_vs_AD.csv', index=False)
-run_classification_experiments(data, feat_combo, classifiers, results_csv='experiments/2024-03-28_Cross_Sectional_CN_MCI_AD_Classification_Matched_Data/data/results_CN_vs_AD.csv', num_folds=5, impute_method='mean')
+run_classification_experiments(
+    data, feat_combo, classifiers, 
+    results_csv='experiments/2024-03-28_Cross_Sectional_CN_MCI_AD_Classification_Matched_Data/data/results_CN_vs_AD.csv', 
+    num_folds=5, impute_method='mean', feature_selection_method='backward')
 
 
 # # CN vs. MCI classification
