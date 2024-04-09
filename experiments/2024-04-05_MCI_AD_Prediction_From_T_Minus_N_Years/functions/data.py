@@ -24,6 +24,7 @@ class Visualize_Progression_Data_Points:
             else:
                 df.loc[i,'diagnosis'] = databank.loc[loc_filter, 'diagnosis_simple'].values[0]
         
+        df['diagnosis'] = df['diagnosis'].replace('dementia', 'AD')
         self.df = df
         
     def mark_progression_subjects_out(self):
@@ -37,7 +38,7 @@ class Visualize_Progression_Data_Points:
         Note: subjects, whose diagnosis of available sessions begins with MCI or AD, are excluded.
         """
         
-        self.df = self.df.loc[self.df['diagnosis'].notna(), ].copy()
+        self.df = self.df.loc[self.df['diagnosis'].isin(['normal', 'MCI', 'AD']), ].copy()
         
         for disease in ['AD', 'MCI']:
             self.df[f'age_{disease}'] = None
@@ -81,11 +82,12 @@ class Visualize_Progression_Data_Points:
                 data=df, 
                 x=x_axis, y='y_subject', 
                 hue='diagnosis', 
-                palette=['tab:green', 'tab:blue', 'tab:orange', 'tab:red'],
+                palette=['tab:green', 'tab:orange', 'tab:red'],
                 alpha=1,
                 ax=axes[ax_id]
                 )
-            
+            axes[ax_id].set_xlabel(f'{x_axis} (years)', fontsize=16, fontfamily='DejaVu Sans')
+            axes[ax_id].set_ylabel('Subject', fontsize=16, fontfamily='DejaVu Sans')
         fig.savefig(png, dpi=300)
         
         
@@ -93,4 +95,5 @@ vis = Visualize_Progression_Data_Points(
     pred_csv='models/2024-02-07_ResNet101_BRAID_warp/predictions/predicted_age_fold-1_test_bc.csv', 
     databank_csv='/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti_v2.csv')
 vis.mark_progression_subjects_out()
-vis.visualize_data_points('experiments/2024-04-05_MCI_AD_Prediction_From_T_Minus_N_Years/figs/vis_progression_data_points.png', disease='MCI')
+vis.visualize_data_points('experiments/2024-04-05_MCI_AD_Prediction_From_T_Minus_N_Years/figs/vis_progression_data_points_MCI.png', disease='MCI')
+vis.visualize_data_points('experiments/2024-04-05_MCI_AD_Prediction_From_T_Minus_N_Years/figs/vis_progression_data_points_AD.png', disease='AD')
