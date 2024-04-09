@@ -43,11 +43,19 @@ local_tmp_dir = Path('/tmp/.GoneAfterReboot/tmp_t1')
 local_tmp_dir.mkdir(parents=True, exist_ok=True)
 
 # Model inference
-for stage, csv in dict_csv['input'].items():
-    df = pd.read_csv(csv)
-    df['age_pred'] = None
-    
+for stage in dict_csv['input'].keys():
+    if Path(dict_csv['output'][stage]).is_file():
+        print('Found existing output csv. Use it as base.')
+        df = pd.read_csv(dict_csv['output'][stage])
+    else:
+        df = pd.read_csv(dict_csv['input'][stage])
+        df['age_pred'] = None
+
+    ct_cache = 0
     for i, row in tqdm(df.iterrows(), total=len(df.index), desc=f'Predict age for {stage} set'):
+        if pd.notnull(row['age_pred']): continue
+        ct_cache += 1
+        
         path_t1_server = databank_root_server / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / f"{row['dataset']}_{row['subject']}_{row['session']}_scan-{row['scan']}_T1w.nii.gz"
 
         # transfer to local
@@ -68,7 +76,10 @@ for stage, csv in dict_csv['input'].items():
             antsxnet_cache_directory='/tmp/.GoneAfterReboot/antsxnet_cache',
             )
         df.at[i, 'age_pred'] = deep['predicted_age']
-        df.to_csv(dict_csv['output'][stage], index=False)
+        if ct_cache % 25 == 0:
+            df.to_csv(dict_csv['output'][stage], index=False)
 
         # remove local file
         os.remove(path_t1)
+        
+    df.to_csv(dict_csv['output'][stage], index=False)
