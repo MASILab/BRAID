@@ -4,6 +4,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
 from tqdm import tqdm
+from warnings import simplefilter
+simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 
 def roster_brain_age_models():
     dict_models = {
@@ -90,8 +92,12 @@ class DataPreparation:
         return df
     
     def assign_cn_label(self, df):
-        """ Create a new column "cn_label" to indicate whether the subject is cognitively normal 
-        and has only cognitively normal in his/her diagnosis history.
+        """ Create a new column "cn_label" to indicate whether the subject is cognitively normal.
+        1:   the subject is cognitively normal, 
+             and has only cognitively normal in his/her diagnosis history, 
+             and has at least one following session in which the subject is still cognitively normal.
+        0.5: the subject is cognitively normal,
+             and has only cognitively normal in his/her diagnosis history.
         """
         if 'subj' not in df.columns:
             df['subj'] = df['dataset'] + '_' + df['subject']
@@ -100,9 +106,13 @@ class DataPreparation:
         
         for subj in df.loc[df['diagnosis']=='normal', 'subj'].unique():
             if len(df.loc[df['subj']==subj, 'diagnosis'].unique())==1:  # there is only 'normal' in diagnosis history
+                df.loc[df['subj']==subj, 'cn_label'] = 0.5
                 if len(df.loc[df['subj']==subj, 'age'].unique())>=2:  # at least two sessions are available
                     # pick all but the last session (which is uncertain if it progresses to MCI/AD)
                     df.loc[(df['subj']==subj) & (df['age']!=df.loc[df['subj']==subj,'age'].max()), 'cn_label'] = 1
+        num_subj_strict = len(df.loc[df['cn_label']==1, 'subj'].unique())
+        num_subj_loose = len(df.loc[df['cn_label']>=0.5, 'subj'].unique())
+        print(f'Found {num_subj_strict} subjects with strict CN label, and {num_subj_loose} subjects with loose CN label.')
         return df
     
     def feature_engineering(self, df):
@@ -253,7 +263,10 @@ class DataPreparation:
             axes[ax_id].set_ylabel('Subject', fontsize=16, fontfamily='DejaVu Sans')
         fig.savefig(png, dpi=300)
     
-    def get_subsets(self, df, disease='MCI', method='index cut', num_subsets=11):
+    def get_preclinical_subsets(self, df, disease='MCI', method='index cut', num_subsets=11):
+        """ Sample num_subsets subsets of data points from the dataframe. Each subset represents 
+        a collection of cross-sectional data points that are years before the first diagnosis of desease.
+        """
         
         if 'subj' not in df.columns:
             df['subj'] = df['dataset'] + '_' + df['subject']
@@ -270,9 +283,28 @@ class DataPreparation:
                     assert num_dp >= 2, f"The number of qualified data points for {subj} is less than 2."
                     
                     dict_subsets[i] = pd.concat([dict_subsets[i], rows_subj.iloc[round(i*(num_dp-1)/(num_subsets-1)), ].to_frame().T])
-
+        else:
+            raise ValueError(f"Method '{method}' is not supported.")
+        
+        print(f"Sampled {num_subsets-1} subsets of preclinical data points and 1 subset of clinical data points.")
+        for k in dict_subsets.keys():
+            print(f"Subset {k}: {dict_subsets[k][f'time_since_{disease}'].mean():.2f} +/- {dict_subsets[k][f'time_since_{disease}'].std():.2f} to {disease}")
+        
         return dict_subsets
     
-    def get_matched_cn_data(self, df_all, df_subset, ):
-        # TODO: implement this function
-        pass
+    def get_matched_cn_data(self, df_main, df_subset, age_diff_threshold=1):
+        """ Use greedy algorithm to sample a subset of cognitively normal data points from the main dataframe df_main.
+        The subset matches the data points in df_subset in terms of age and sex.
+            The greedy algorithm will prioritize using the subjects that are cognitively normal under the strict definition.
+        If the search does not find any data points that satisfy the age_diff_threshold, 
+        the greedy algorithm will then use the subjects that are cognitively normal under the loose definition.
+        """
+        if 'subj' not in df_main.columns:
+            df_main['subj'] = df_main['dataset'] + '_' + df_main['subject']
+        if 'subj' not in df_subset.columns:
+            df_subset['subj'] = df_subset['dataset'] + '_' + df_subset['subject']
+        
+        # df_matched = pd.DataFrame()
+        # match_id = 0
+        
+        
