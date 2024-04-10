@@ -89,6 +89,95 @@ class DataPreparation:
         df['diagnosis'] = df['diagnosis'].replace('dementia', 'AD')
         return df
     
+    def assign_cn_label(self, df):
+        """ Create a new column "cn_label" to indicate whether the subject is cognitively normal 
+        and has only cognitively normal in his/her diagnosis history.
+        """
+        if 'subj' not in df.columns:
+            df['subj'] = df['dataset'] + '_' + df['subject']
+        
+        df['cn_label'] = None
+        
+        for subj in df.loc[df['diagnosis']=='normal', 'subj'].unique():
+            if len(df.loc[df['subj']==subj, 'diagnosis'].unique())==1:  # there is only 'normal' in diagnosis history
+                if len(df.loc[df['subj']==subj, 'age'].unique())>=2:  # at least two sessions are available
+                    # pick all but the last session (which is uncertain if it progresses to MCI/AD)
+                    df.loc[(df['subj']==subj) & (df['age']!=df.loc[df['subj']==subj,'age'].max()), 'cn_label'] = 1
+        return df
+    
+    def feature_engineering(self, df):
+        """ Create new features from current data. Convert categorical data to binary.
+        """
+        # Convert sex to binary
+        df['sex'] = df['sex'].map({'female': 0, 'male': 1})
+
+        # Mean value of age predictions from all folds for each model
+        for model in self.dict_models.keys():
+            if model=='GM age (DeepBrainNet)': 
+                continue  # because there is only one model
+            else:
+                col_suffix = self.dict_models[model]['col_suffix']
+                df[f'age_pred{col_suffix}_mean'] = df[[f'age_pred{col_suffix}_{fold_idx}' for fold_idx in [1,2,3,4,5]]].mean(axis=1)
+        
+        # Brain age gap (BAG)
+        for model in self.dict_models.keys():
+            col_suffix = self.dict_models[model]['col_suffix']
+            if model=='GM age (DeepBrainNet)':
+                df[f'age_pred{col_suffix}_bag'] = df[f'age_pred{col_suffix}'] - df['age']
+            else:
+                for fold_idx in [1,2,3,4,5]:
+                    df[f'age_pred{col_suffix}_{fold_idx}_bag'] = df[f'age_pred{col_suffix}_{fold_idx}'] - df['age']
+                df[f'age_pred{col_suffix}_mean_bag'] = df[f'age_pred{col_suffix}_mean'] - df['age']
+        
+        # BAG change rate_i = (BAG_i+1 - BAG_i) / (age_i+1 - age_i)
+        for model in self.dict_models.keys():
+            col_suffix = self.dict_models[model]['col_suffix']
+            if model=='GM age (DeepBrainNet)':
+                df[f'age_pred{col_suffix}_bag_change_rate'] = None
+            else:
+                for fold_idx in [1,2,3,4,5]:
+                    df[f'age_pred{col_suffix}_{fold_idx}_bag_change_rate'] = None
+                df[f'age_pred{col_suffix}_mean_bag_change_rate'] = None
+        
+        for subj in df['subj'].unique():
+            rows_subj = df.loc[df['subj']==subj, ].copy()
+            rows_subj = rows_subj.sort_values(by='age')
+            for i in range(len(rows_subj.index)-1):
+                interval = rows_subj.iloc[i+1]['age'] - rows_subj.iloc[i]['age']  # age_i+1 - age_i
+                
+                for model in self.dict_models.keys():
+                    col_suffix = self.dict_models[model]['col_suffix']
+                    if model=='GM age (DeepBrainNet)':
+                        delta_bag = rows_subj.iloc[i+1][f'age_pred{col_suffix}_bag'] - rows_subj.iloc[i][f'age_pred{col_suffix}_bag']
+                        df.loc[(df['subj']==subj)&(df['age']==rows_subj.iloc[i]['age']), f'age_pred{col_suffix}_bag_change_rate'] = (delta_bag / interval) if interval > 0 else None
+                    else:
+                        for fold_idx in [1,2,3,4,5]:
+                            delta_bag = rows_subj.iloc[i+1][f'age_pred{col_suffix}_{fold_idx}_bag'] - rows_subj.iloc[i][f'age_pred{col_suffix}_{fold_idx}_bag']
+                            df.loc[(df['subj']==subj)&(df['age']==rows_subj.iloc[i]['age']), f'age_pred{col_suffix}_{fold_idx}_bag_change_rate'] = (delta_bag / interval) if interval > 0 else None
+                        delta_bag = rows_subj.iloc[i+1][f'age_pred{col_suffix}_mean_bag'] - rows_subj.iloc[i][f'age_pred{col_suffix}_mean_bag']
+                        df.loc[(df['subj']==subj)&(df['age']==rows_subj.iloc[i]['age']), f'age_pred{col_suffix}_mean_bag_change_rate'] = (delta_bag / interval) if interval > 0 else None
+        
+        # interactions (chronological age/sex with BAG/BAG change rate)
+        for model in self.dict_models.keys():
+            col_suffix = self.dict_models[model]['col_suffix']
+            if model=='GM age (DeepBrainNet)':
+                df[f'age_pred{col_suffix}_bag_multiply_age'] = df[f'age_pred{col_suffix}_bag'] * df['age']
+                df[f'age_pred{col_suffix}_bag_change_rate_multiply_age'] = df[f'age_pred{col_suffix}_bag_change_rate'] * df['age']
+                df[f'age_pred{col_suffix}_bag_multiply_sex'] = df[f'age_pred{col_suffix}_bag'] * df['sex']
+                df[f'age_pred{col_suffix}_bag_change_rate_multiply_sex'] = df[f'age_pred{col_suffix}_bag_change_rate'] * df['sex']
+            else:
+                for fold_idx in [1,2,3,4,5]:
+                    df[f'age_pred{col_suffix}_{fold_idx}_bag_multiply_age'] = df[f'age_pred{col_suffix}_{fold_idx}_bag'] * df['age']
+                    df[f'age_pred{col_suffix}_{fold_idx}_bag_change_rate_multiply_age'] = df[f'age_pred{col_suffix}_{fold_idx}_bag_change_rate'] * df['age']
+                    df[f'age_pred{col_suffix}_{fold_idx}_bag_multiply_sex'] = df[f'age_pred{col_suffix}_{fold_idx}_bag'] * df['sex']
+                    df[f'age_pred{col_suffix}_{fold_idx}_bag_change_rate_multiply_sex'] = df[f'age_pred{col_suffix}_{fold_idx}_bag_change_rate'] * df['sex']
+                df[f'age_pred{col_suffix}_mean_bag_multiply_age'] = df[f'age_pred{col_suffix}_mean_bag'] * df['age']
+                df[f'age_pred{col_suffix}_mean_bag_change_rate_multiply_age'] = df[f'age_pred{col_suffix}_mean_bag_change_rate'] * df['age']
+                df[f'age_pred{col_suffix}_mean_bag_multiply_sex'] = df[f'age_pred{col_suffix}_mean_bag'] * df['sex']
+                df[f'age_pred{col_suffix}_mean_bag_change_rate_multiply_sex'] = df[f'age_pred{col_suffix}_mean_bag_change_rate'] * df['sex']
+
+        return df
+
     def mark_progression_subjects_out(self, df):
         """ Create the following columns to the dataframe:
             - "age_AD": the age when the subject was diagnosed with AD for the first time.
@@ -102,21 +191,21 @@ class DataPreparation:
         
         df = df.loc[df['diagnosis'].isin(['normal', 'MCI', 'AD']), ].copy()
     
-        if 'dsubj' not in df.columns:
-            df['dsubj'] = df['dataset'] + '_' + df['subject']
+        if 'subj' not in df.columns:
+            df['subj'] = df['dataset'] + '_' + df['subject']
         
         for disease in ['AD', 'MCI']:
             df[f'age_{disease}'] = None
             
-            for subj in df.loc[df['diagnosis']==disease, 'dsubj'].unique():
-                rows_subj = df.loc[df['dsubj']==subj, ].copy()
+            for subj in df.loc[df['diagnosis']==disease, 'subj'].unique():
+                rows_subj = df.loc[df['subj']==subj, ].copy()
                 rows_subj = rows_subj.sort_values(by='age')
                 if rows_subj.iloc[0]['diagnosis'] != 'normal':
                     continue
-                df.loc[df['dsubj']==subj, f'age_{disease}'] = rows_subj.loc[rows_subj['diagnosis']==disease, 'age'].min()
+                df.loc[df['subj']==subj, f'age_{disease}'] = rows_subj.loc[rows_subj['diagnosis']==disease, 'age'].min()
             df[f'time_since_{disease}'] = df['age'] - df[f'age_{disease}']
             
-            num_subj = len(df.loc[df[f'age_{disease}'].notna(), 'dsubj'].unique())
+            num_subj = len(df.loc[df[f'age_{disease}'].notna(), 'subj'].unique())
             print(f'Found {num_subj} subjects with {disease} progression.')
         
         return df
@@ -129,13 +218,13 @@ class DataPreparation:
         assert f"time_since_{disease}" in df.columns, f"Column 'time_since_{disease}' is not available."
         
         df = df.loc[df[f'age_{disease}'].notna(), ].copy()
-        if 'dsubj' not in df.columns:
-            df['dsubj'] = df['dataset'] + '_' + df['subject']
+        if 'subj' not in df.columns:
+            df['subj'] = df['dataset'] + '_' + df['subject']
             
         df = df.sort_values(by='age')
         df['y_subject'] = None
-        for i, subj in enumerate(df['dsubj'].unique()):
-            df.loc[df['dsubj']==subj, 'y_subject'] = i
+        for i, subj in enumerate(df['subj'].unique()):
+            df.loc[df['subj']==subj, 'y_subject'] = i
         
         fig, axes = plt.subplots(1, 2, figsize=(12, 12))
         
@@ -143,7 +232,7 @@ class DataPreparation:
             sns.lineplot(
                 data=df,
                 x=x_axis, y='y_subject',
-                units="dsubj",
+                units="subj",
                 estimator=None, 
                 lw=1,
                 color = 'tab:gray',
@@ -166,15 +255,15 @@ class DataPreparation:
     
     def get_subsets(self, df, disease='MCI', method='index cut', num_subsets=11):
         
-        if 'dsubj' not in df.columns:
-            df['dsubj'] = df['dataset'] + '_' + df['subject']
+        if 'subj' not in df.columns:
+            df['subj'] = df['dataset'] + '_' + df['subject']
             
         dict_subsets = {i: pd.DataFrame() for i in range(num_subsets)}
         
         if method == 'index cut':
             for i in range(num_subsets):
-                for subj in df.loc[df[f'time_since_{disease}'].notna(), 'dsubj'].unique():
-                    rows_subj = df.loc[(df['dsubj']==subj) & (df[f'time_since_{disease}']<=0), ].copy()
+                for subj in df.loc[df[f'time_since_{disease}'].notna(), 'subj'].unique():
+                    rows_subj = df.loc[(df['subj']==subj) & (df[f'time_since_{disease}']<=0), ].copy()
                     rows_subj = rows_subj.sort_values(by=f'time_since_{disease}', ascending=False)
                     
                     num_dp = len(rows_subj)
@@ -183,3 +272,7 @@ class DataPreparation:
                     dict_subsets[i] = pd.concat([dict_subsets[i], rows_subj.iloc[round(i*(num_dp-1)/(num_subsets-1)), ].to_frame().T])
 
         return dict_subsets
+    
+    def get_matched_cn_data(self, df_all, df_subset, ):
+        # TODO: implement this function
+        pass
