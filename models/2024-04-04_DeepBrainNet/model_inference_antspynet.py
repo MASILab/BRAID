@@ -35,7 +35,7 @@ dict_csv = {
     },
     'output': {
         'test': '/nfs/masi/gaoc11/projects/BRAID/models/2024-04-04_DeepBrainNet/predictions/predicted_age_test.csv',
-        'train': '/nfs/masi/gaoc11/projects/BRAID/models/2024-04-04_DeepBrainNet/predictions/predicted_age_train.csv',
+        'train': '/nfs/masi/gaoc11/projects/BRAID/models/2024-04-04_DeepBrainNet/predictions/predicted_age_trainval.csv',
     },
 }
 databank_root_server = Path('/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/databank_t1w/')  # path on hickory (GDPR sshfs)

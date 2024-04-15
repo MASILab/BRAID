@@ -14,8 +14,9 @@ class BiasCorrection:
     def get_trainval_test_csv_dict(self):
         
         dict_prediction_csv = {'trainval':[], 'test':[]}
+        fn_pattern = 'predicted_age_trainval.csv' if 'DeepBrainNet' in str(self.prediction_root) else 'predicted_age_fold-*_trainval.csv'
         
-        for csv_trainval in self.prediction_root.glob('predicted_age_fold-*_trainval.csv'):
+        for csv_trainval in self.prediction_root.glob(fn_pattern):
             csv_test = csv_trainval.parent / csv_trainval.name.replace('trainval', 'test')
             if csv_test.is_file():
                 dict_prediction_csv['trainval'].append(str(csv_trainval))
@@ -34,17 +35,22 @@ class BiasCorrection:
     
         
     def get_bc_params(self, csv_trainval):
+        """ Calculate the bias correction parameters (slope and intercept)
+        """
         df = pd.read_csv(csv_trainval)
-        subj_val = self.get_subj_val(csv_trainval)
-        df = df.loc[df['dataset_subject'].isin(subj_val)&(df['age_gt']>=45)&(df['age_gt']<90), ]
-        df = df.groupby('dataset_subject').apply(lambda x: x.loc[x['age_gt'].idxmin()]).reset_index(drop=True)
+        if 'DeepBrainNet' in csv_trainval:
+            df = df.loc[(df['age']>=45)&(df['age']<90), ]
+        else:  # use the validation set for bias correction
+            subj_val = self.get_subj_val(csv_trainval)
+            df = df.loc[df['dataset_subject'].isin(subj_val)&(df['age']>=45)&(df['age']<90), ]
+        df = df.groupby('dataset_subject').apply(lambda x: x.loc[x['age'].idxmin()]).reset_index(drop=True)  # take the cross-sectional samples
         
-        x = sm.add_constant(df['age_gt'])
-        y = df['age_pred'] - df['age_gt']
+        x = sm.add_constant(df['age'])
+        y = df['age_pred'] - df['age']
         model = sm.OLS(y, x)
         results = model.fit()
         
-        slope = results.params['age_gt']
+        slope = results.params['age']
         intercept = results.params['const']
         
         return slope, intercept
@@ -53,7 +59,7 @@ class BiasCorrection:
     def apply_bc(self, slope, intercept, csv):
         df = pd.read_csv(csv)
         df_bc = df.copy()
-        df_bc['age_pred'] = df['age_pred'] - (slope*df['age_gt'] + intercept)
+        df_bc['age_pred'] = df['age_pred'] - (slope*df['age'] + intercept)
         return df_bc
     
     
@@ -75,6 +81,7 @@ if __name__ == "__main__":
         'models/2024-02-07_T1wAge_ResNet101/predictions',
         'models/2024-02-12_TSAN_first_stage/predictions',
         'models/2024-02-13_TSAN_second_stage/predictions',
+        'models/2024-04-04_DeepBrainNet/predictions',
     ]
     for prediction_root in tqdm(prediction_roots):
         bc = BiasCorrection(prediction_root, crossval_subjects_dir)
