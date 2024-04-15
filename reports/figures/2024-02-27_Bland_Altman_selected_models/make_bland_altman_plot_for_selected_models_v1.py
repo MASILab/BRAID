@@ -10,11 +10,7 @@ from tqdm import tqdm
 from pathlib import Path
 
 class bland_altman_plot():
-    def __init__(
-        self, 
-        prediction_root,
-        databank_csv, 
-        crossval_subjects_dir):
+    def __init__(self, prediction_root, databank_csv, crossval_subjects_dir):
         
         # Data
         self.prediction_root = Path(prediction_root)
@@ -40,29 +36,36 @@ class bland_altman_plot():
         df = pd.read_csv(csv)
         
         # retrieve diagnosis information from databank
-        df['diagnosis'] = df.apply(lambda row: self.databank.loc[
-            (self.databank['dataset'] == row['dataset']) &
-            (self.databank['subject'] == row['subject']) &
-            ((self.databank['session'] == row['session']) | (self.databank['session'].isnull())),
-            'diagnosis_simple'].values[0], axis=1)
-        list_selected_diagnosis = ['normal', 'MCI', 'dementia']
+        df['diagnosis'] = None
+        for i, row in df.iterrows():
+            loc_filter = (self.databank['dataset']==row['dataset']) & (self.databank['subject']==row['subject']) & ((self.databank['session']==row['session']) | self.databank['session'].isnull())
+            if row['dataset'] in ['UKBB']:
+                control_label = self.databank.loc[loc_filter, 'control_label'].values[0]
+                df.loc[i,'diagnosis'] = 'normal' if control_label == 1 else None
+            else:
+                df.loc[i,'diagnosis'] = self.databank.loc[loc_filter, 'diagnosis_simple'].values[0]
+        df['diagnosis'] = df['diagnosis'].replace('dementia', 'AD')
+        list_selected_diagnosis = ['normal', 'MCI', 'AD']
         df = df.loc[df['diagnosis'].isin(list_selected_diagnosis), ]
         
         # prepare data for plotting
-        df['age_diff'] = df['age_pred'] - df['age_gt']
-        df['testing set'] = np.where(df['dataset'] == 'ICBM', 'external dataset', 'internal dataset')
+        df['age_diff'] = df['age_pred'] - df['age']
+        if "DeepBrainNet" in str(csv):
+            df['testing set'] = np.where(df['dataset'] == 'ICBM', 'ICBM', 'other datasets')
+        else:
+            df['testing set'] = np.where(df['dataset'] == 'ICBM', 'external dataset', 'internal dataset')
         
         # plot
         fig, axes = plt.subplots(1, len(list_selected_diagnosis), figsize=(11, 4), sharex=True, sharey=True)
 
         for i, dx in enumerate(list_selected_diagnosis):
-            age_mask = (df['age_gt'] >= 45) & (df['age_gt'] < 90)
+            age_mask = (df['age'] >= 45) & (df['age'] < 90)
             age_mask_inv = ~age_mask
             dx_mask = df['diagnosis'] == dx
             
             sns.scatterplot(
                 data=df.loc[age_mask_inv & dx_mask, ],
-                x='age_gt',
+                x='age',
                 y='age_diff',
                 s=self.marker_size,
                 linewidth=self.marker_linewidth,
@@ -73,7 +76,7 @@ class bland_altman_plot():
             
             sns.scatterplot(
                 data=df.loc[age_mask & dx_mask, ],
-                x='age_gt',
+                x='age',
                 y='age_diff',
                 hue='testing set',
                 s=self.marker_size,
@@ -84,7 +87,7 @@ class bland_altman_plot():
 
             sns.kdeplot(
                 data=df.loc[age_mask & dx_mask, ],
-                x='age_gt',
+                x='age',
                 y='age_diff',
                 hue='testing set',
                 fill=True,
@@ -95,8 +98,9 @@ class bland_altman_plot():
             )
             
             axes[i].axhline(y=0, linestyle='-', linewidth=1, color='k', alpha=0.25)
-            axes[i].axvline(x=45, linestyle='--', linewidth=1, color='k', alpha=0.25)
-            axes[i].axvline(x=90, linestyle='--', linewidth=1, color='k', alpha=0.25, label='age range used for training')
+            if "DeepBrainNet" not in str(csv):
+                axes[i].axvline(x=45, linestyle='--', linewidth=1, color='k', alpha=0.25)
+                axes[i].axvline(x=90, linestyle='--', linewidth=1, color='k', alpha=0.25, label='age range used for training')
             axes[i].legend(prop={'size': self.fontsize['legend'], 'family': self.fontfamily}, loc='lower left')
             axes[i].set_xlabel('chronological age (years)', fontsize=self.fontsize['label'], fontname=self.fontfamily)
             axes[i].set_ylabel('predicted age - chronological age (years)', fontsize=self.fontsize['label'], fontname=self.fontfamily)
@@ -128,25 +132,28 @@ class bland_altman_plot():
         df = pd.read_csv(csv)
         
         # retrive train/val splitting information
-        if 'set' not in df.columns:
-            match = re.search(r'fold-(\d+)', csv.name)
-            fold_idx = int(match.group(1))
+        if "DeepBrainNet" in str(csv):
+            df['set'] = 'val'
+        else:
+            if 'set' not in df.columns:
+                match = re.search(r'fold-(\d+)', csv.name)
+                fold_idx = int(match.group(1))
 
-            df['set'] = None
-            subj_train = np.load((self.crossval_subjects_dir / f"subjects_fold_{fold_idx}_train.npy"), allow_pickle=True)
-            subj_val = np.load((self.crossval_subjects_dir / f"subjects_fold_{fold_idx}_val.npy"), allow_pickle=True)
-            df.loc[df['dataset_subject'].isin(subj_train), 'set'] = 'train'
-            df.loc[df['dataset_subject'].isin(subj_val), 'set'] = 'val'
+                df['set'] = None
+                subj_train = np.load((self.crossval_subjects_dir / f"subjects_fold_{fold_idx}_train.npy"), allow_pickle=True)
+                subj_val = np.load((self.crossval_subjects_dir / f"subjects_fold_{fold_idx}_val.npy"), allow_pickle=True)
+                df.loc[df['dataset_subject'].isin(subj_train), 'set'] = 'train'
+                df.loc[df['dataset_subject'].isin(subj_val), 'set'] = 'val'
         
         # plot
-        df['age_diff'] = df['age_pred'] - df['age_gt']
+        df['age_diff'] = df['age_pred'] - df['age']
         fig, ax = plt.subplots(1, 1, figsize=(4, 4))
-        age_mask = (df['age_gt'] >= 45) & (df['age_gt'] < 90)
+        age_mask = (df['age'] >= 45) & (df['age'] < 90)
         age_mask_inv = ~age_mask
             
         sns.scatterplot(
             data=df.loc[age_mask_inv, ],
-            x='age_gt',
+            x='age',
             y='age_diff',
             s=self.marker_size,
             linewidth=self.marker_linewidth,
@@ -157,10 +164,10 @@ class bland_altman_plot():
 
         sns.scatterplot(
             data=df.loc[age_mask, ],
-            x='age_gt',
+            x='age',
             y='age_diff',
             hue='set',
-            hue_order=['val', 'train'],
+            hue_order=['val', 'train'] if 'train' in df['set'].unique() else ['val'],
             s=self.marker_size,
             linewidth=self.marker_linewidth,
             alpha=self.alpha['scatter_marker_inside'],
@@ -168,8 +175,9 @@ class bland_altman_plot():
         )
             
         ax.axhline(y=0, linestyle='-', linewidth=1, color='k', alpha=0.25)
-        ax.axvline(x=45, linestyle='--', linewidth=1, color='k', alpha=0.25)
-        ax.axvline(x=90, linestyle='--', linewidth=1, color='k', alpha=0.25, label='age range used for training')
+        if "DeepBrainNet" not in str(csv):
+            ax.axvline(x=45, linestyle='--', linewidth=1, color='k', alpha=0.25)
+            ax.axvline(x=90, linestyle='--', linewidth=1, color='k', alpha=0.25, label='age range used for training')
         ax.legend(prop={'size': self.fontsize['legend'], 'family': self.fontfamily}, loc='lower left')
         ax.set_xlabel('chronological age (years)', fontsize=self.fontsize['label'], fontname=self.fontfamily)
         ax.set_ylabel('predicted age - chronological age (years)', fontsize=self.fontsize['label'], fontname=self.fontfamily)
@@ -197,19 +205,15 @@ class bland_altman_plot():
                     bbox_inches='tight')
             
     def plot_for_every_prediction_csv(self):
-        csvs = sorted(self.prediction_root.glob('predicted_age_fold-*.csv'))
+        csvs = sorted(self.prediction_root.glob('predicted_age_*.csv'))
         
         for csv in tqdm(csvs, total=len(csvs), desc='Bland-Altman Plot'):
-            
             if 'test' in csv.name:
                 self.plot_testing(csv)
-                
             elif 'trainval' in csv.name:
                 self.plot_training(csv)
-                
             else:
                 print(f'csv name {csv.name} is not classified correctly.')
-            
             plt.close('all')
     
     
@@ -238,6 +242,10 @@ if __name__ == "__main__":
         {
             'prediction_root': 'models/2024-01-16_ResNet101_MLP/predictions',
             'databank_csv': '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti_v2.csv'
+        },
+        {
+            'prediction_root': 'models/2024-04-04_DeepBrainNet/predictions',
+            'databank_csv': '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_t1w_v2.csv'
         },
     ]
     crossval_subjects_dir = '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/cross_validation/'
