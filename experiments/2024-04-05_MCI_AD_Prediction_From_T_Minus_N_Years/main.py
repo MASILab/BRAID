@@ -10,7 +10,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--disease', type=str, default='MCI')
     parser.add_argument('--num_subsets', type=int, default=7)
-    parser.add_argument('--bc', type=bool, default=True, help='whether to use bias corrected predictions or not')
+    parser.add_argument('--bc', type=bool, default=True, help='whether to use bias corrected predictions or not')  # TODO: need to fix the boolean argument
     parser.add_argument('--figdir', type=str, default='experiments/2024-04-05_MCI_AD_Prediction_From_T_Minus_N_Years/figs/')
     parser.add_argument('--outdir', type=str, default='experiments/2024-04-05_MCI_AD_Prediction_From_T_Minus_N_Years/results/')
     parser.add_argument('--databank_csv', type=str, default='/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti_v2.csv')
@@ -24,7 +24,7 @@ if __name__ == '__main__':
         'classifier': [],
         'feature_combination': [],
         'subset_id': [],
-        'time_to_event_mean': [],
+        f'time_to_{args.disease}': [],
         'auc_mean': [],
         'auc_std': [],
         }
@@ -41,7 +41,7 @@ if __name__ == '__main__':
                 dict_results['classifier'].append(classifier_name)
                 dict_results['feature_combination'].append(combo_name)
                 dict_results['subset_id'].append(subset_id)
-                dict_results['time_to_event_mean'].append(df_subset[f'time_to_{args.disease}'].mean())
+                dict_results[f'time_to_{args.disease}'].append(df_subset[f'time_to_{args.disease}'].mean())
                 dict_results['auc_mean'].append(auc_mean)
                 dict_results['auc_std'].append(auc_std)
 
