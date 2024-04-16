@@ -1,4 +1,5 @@
 import pdb
+import random
 import seaborn as sns
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -25,13 +26,25 @@ def roster_brain_age_models():
             'prediction_root': 'models/2024-02-12_TSAN_first_stage/predictions',
             'col_suffix': '_gm_age_tsan',
         },
-        # 'GM age (DeepBrainNet)': {
-        #     'prediction_root': 'models/2024-04-04_DeepBrainNet/predictions',
-        #     'col_suffix': '_gm_age_dbn',
-        # },        
+        'GM age (DeepBrainNet)': {
+            'prediction_root': 'models/2024-04-04_DeepBrainNet/predictions',
+            'col_suffix': '_gm_age_dbn',
+        },        
     }
     return dict_models
 
+def roster_feature_combinations(df):
+    feat_combo = {'basic (chronological age + sex)': ['age', 'sex']}
+    feat_combo['basic + WM age (purified)'] = ['age', 'sex'] + [col for col in df.columns if '_wm_age_purified' in col]
+    feat_combo['basic + GM age (ours)'] = ['age', 'sex'] + [col for col in df.columns if '_gm_age_ours' in col]
+    feat_combo['basic + GM age (TSAN)'] = ['age', 'sex'] + [col for col in df.columns if '_gm_age_tsan' in col]
+    feat_combo['basic + GM age (DeepBrainNet)'] = ['age', 'sex'] + [col for col in df.columns if '_gm_age_dbn' in col]
+    feat_combo['basic + WM age (contaminated)'] = ['age', 'sex'] + [col for col in df.columns if '_wm_age_contaminated' in col]
+    feat_combo['basic + WM age (purified) + GM age (ours)'] = ['age', 'sex'] + [col for col in df.columns if '_wm_age_purified' in col] + [col for col in df.columns if '_gm_age_ours' in col]
+    feat_combo['basic + WM age (purified) + GM age (TSAN)'] = ['age', 'sex'] + [col for col in df.columns if '_wm_age_purified' in col] + [col for col in df.columns if '_gm_age_tsan' in col]
+    feat_combo['basic + WM age (purified) + GM age (DeepBrainNet)'] = ['age', 'sex'] + [col for col in df.columns if '_wm_age_purified' in col] + [col for col in df.columns if '_gm_age_dbn' in col]
+    return feat_combo
+    
 class DataPreparation:
     def __init__(self, dict_models, databank_csv):
         self.dict_models = dict_models
@@ -191,11 +204,9 @@ class DataPreparation:
     def mark_progression_subjects_out(self, df):
         """ Create the following columns to the dataframe:
             - "age_AD": the age when the subject was diagnosed with AD for the first time.
-            - "time_since_AD": the time interval (in years) between the first AD diagnosis and the current time point, 
-                        negative means before the diagnosis and vice versa.
+            - "time_to_AD": the time (in years) to the first AD diagnosis.
             - "age_MCI": the age when the subject was diagnosed with MCI for the first time.
-            - "time_since_MCI": the time interval (in years) between the first MCI diagnosis and the current time point, 
-                        negative means before the diagnosis and vice versa.
+            - "time_to_MCI": the time (in years) to the first MCI diagnosis.
         Note: subjects, whose diagnosis of available sessions begins with MCI or AD, are excluded.
         """
         
@@ -213,7 +224,7 @@ class DataPreparation:
                 if rows_subj.iloc[0]['diagnosis'] != 'normal':
                     continue
                 df.loc[df['subj']==subj, f'age_{disease}'] = rows_subj.loc[rows_subj['diagnosis']==disease, 'age'].min()
-            df[f'time_since_{disease}'] = df['age'] - df[f'age_{disease}']
+            df[f'time_to_{disease}'] = df[f'age_{disease}'] - df['age']
             
             num_subj = len(df.loc[df[f'age_{disease}'].notna(), 'subj'].unique())
             print(f'Found {num_subj} subjects with {disease} progression.')
@@ -225,7 +236,7 @@ class DataPreparation:
         of subjects who have progressed from cognitively normal to MCI or AD.
         """
 
-        assert f"time_since_{disease}" in df.columns, f"Column 'time_since_{disease}' is not available."
+        assert f"time_to_{disease}" in df.columns, f"Column 'time_to_{disease}' is not available."
         
         df = df.loc[df[f'age_{disease}'].notna(), ].copy()
         if 'subj' not in df.columns:
@@ -238,7 +249,7 @@ class DataPreparation:
         
         fig, axes = plt.subplots(1, 2, figsize=(12, 12))
         
-        for ax_id, x_axis in enumerate(['age', f'time_since_{disease}']):            
+        for ax_id, x_axis in enumerate(['age', f'time_to_{disease}']):            
             sns.lineplot(
                 data=df,
                 x=x_axis, y='y_subject',
@@ -260,7 +271,8 @@ class DataPreparation:
                 ax=axes[ax_id]
                 )
             axes[ax_id].set_xlabel(f'{x_axis} (years)', fontsize=16, fontfamily='DejaVu Sans')
-            axes[ax_id].set_ylabel('Subject', fontsize=16, fontfamily='DejaVu Sans')
+            axes[ax_id].set_ylabel('Subject', fontsize=16, fontfamily='DejaVu Sans')  
+        axes[1].invert_xaxis()
         fig.savefig(png, dpi=300)
     
     def get_preclinical_subsets(self, df, disease='MCI', method='index cut', num_subsets=11):
@@ -275,9 +287,9 @@ class DataPreparation:
         
         if method == 'index cut':
             for i in range(num_subsets):
-                for subj in df.loc[df[f'time_since_{disease}'].notna(), 'subj'].unique():
-                    rows_subj = df.loc[(df['subj']==subj) & (df[f'time_since_{disease}']<=0), ].copy()
-                    rows_subj = rows_subj.sort_values(by=f'time_since_{disease}', ascending=False)
+                for subj in df.loc[df[f'time_to_{disease}'].notna(), 'subj'].unique():
+                    rows_subj = df.loc[(df['subj']==subj) & (df[f'time_to_{disease}']>=0), ].copy()
+                    rows_subj = rows_subj.sort_values(by=f'time_to_{disease}', ascending=True)
                     
                     num_dp = len(rows_subj)
                     assert num_dp >= 2, f"The number of qualified data points for {subj} is less than 2."
@@ -288,7 +300,7 @@ class DataPreparation:
         
         print(f"Sampled {num_subsets-1} subsets of preclinical data points and 1 subset of clinical data points.")
         for k in dict_subsets.keys():
-            print(f"Subset {k}: {dict_subsets[k][f'time_since_{disease}'].mean():.2f} +/- {dict_subsets[k][f'time_since_{disease}'].std():.2f} to {disease}")
+            print(f"Subset {k}: {dict_subsets[k][f'time_to_{disease}'].mean():.2f} +/- {dict_subsets[k][f'time_to_{disease}'].std():.2f} to {disease}")
         
         return dict_subsets
     
@@ -341,3 +353,42 @@ class DataPreparation:
                 match_id += 1
         
         return df_matched
+    
+    def split_data_into_k_folds(self, df, num_folds=5, fold_col='fold_idx', random_state=42):
+        """ split the dataset at the subject level for cross-validation,
+        save the fold information in a seperate column 'fold_idx'
+        """
+        assert fold_col not in df.columns, f'Column {fold_col} already exists in the dataframe'
+        df[fold_col] = None
+        
+        for c in df['clf_label'].unique():
+            subj_category = df.loc[df['clf_label']==c, 'subj'].unique().tolist()
+            random.seed(random_state)
+            random.shuffle(subj_category)
+            indices = [int(i*len(subj_category)/num_folds) for i in range(num_folds+1)]
+            
+            for i in range(num_folds):
+                df.loc[(df['clf_label']==c) & df['subj'].isin(subj_category[indices[i]:indices[i+1]]), fold_col] = i+1
+        assert df[fold_col].notna().all(), f'Not all samples are assigned to a fold'
+        
+        return df
+
+
+def prepare_subsets(args):
+    # load data and engineer features
+    d = DataPreparation(dict_models = roster_brain_age_models(), databank_csv = args.databank_csv)
+    df = d.load_predictions_of_all_models(bias_correction=args.bc)
+    df = d.retrieve_diagnosis_label(df)
+    df = d.assign_cn_label(df)
+    df = d.feature_engineering(df)
+    df = d.mark_progression_subjects_out(df)
+    d.visualize_data_points(df, png=(Path(args.figdir)/f'vis_progression_data_points_{args.disease}.png'), disease=args.disease)
+    
+    # take subsets
+    dict_subsets = d.get_preclinical_subsets(df, disease=args.disease, num_subsets=args.num_subsets)
+    dict_subsets_matched = {}
+    for subset_id, df_subset in dict_subsets.items():
+        df_subset_m = d.get_matched_cn_data(df, df_subset)
+        df_subset_m = d.split_data_into_k_folds(df_subset_m, num_folds=5, fold_col='fold_idx', random_state=42)
+        dict_subsets_matched[subset_id] = df_subset_m
+    return dict_subsets, dict_subsets_matched
