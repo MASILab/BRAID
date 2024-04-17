@@ -38,7 +38,9 @@ def visualize_t_minus_n_prediction_results(results, dict_subsets, png):
     timetoevent_col = [col for col in results.columns if 'time_to_' in col]
     assert len(timetoevent_col) == 1
     timetoevent_col = timetoevent_col[0]
-
+    xlim_auc = [-0.25, results[timetoevent_col].max()+0.25]
+    xlim_violin = [-0.25, (results[timetoevent_col].max()+0.5)*2-0.25]  # twice the width of the AUC plot
+    
     # Upper left block: draw the legend
     ax = fig.add_subplot(gs[:3,0])
     lines = []
@@ -76,7 +78,7 @@ def visualize_t_minus_n_prediction_results(results, dict_subsets, png):
                 label=feat_combo)
         ax.vlines(x=results[timetoevent_col].unique(), ymin=0, ymax=1, transform=ax.get_xaxis_transform(), color='black', linestyle='--', linewidth=linewidth, alpha=0.2)
         ax.text(0.02, 0.95, classifier, fontsize=fontsize, fontfamily=fontfamily, transform=ax.transAxes, verticalalignment='top')
-        ax.set_xlim(left=-0.25, right=4.25)
+        ax.set_xlim(left=xlim_auc[0], right=xlim_auc[1])
         ax.invert_xaxis()
         ax.set_ylabel('')
 
@@ -95,7 +97,7 @@ def visualize_t_minus_n_prediction_results(results, dict_subsets, png):
     ax.scatter(x=mean_subsets[timetoevent_col], y=mean_subsets['subset_id'], c='black', marker='d', s=12, label='average')
     ax.legend(loc='upper left', fontsize=fontsize, frameon=True)
     ax.vlines(x=results[timetoevent_col].unique(), ymin=0, ymax=1, transform=ax.get_xaxis_transform(), color='black', linestyle='--', linewidth=linewidth, alpha=0.2)
-    ax.set_xlim(left=-0.25, right=8.75)
+    ax.set_xlim(left=xlim_violin[0], right=xlim_violin[1])
     ax.invert_xaxis()
     ax.set_yticks([])
     ax.set_ylabel(f'Subsets (N={len(dict_subsets[0].index)} each)', fontsize=fontsize, fontfamily=fontfamily)
