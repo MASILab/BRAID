@@ -7,6 +7,17 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from pathlib import Path
 from warnings import simplefilter
+from sklearn.utils import resample
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, confusion_matrix, roc_auc_score
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import SimpleImputer, IterativeImputer, KNNImputer
+from sklearn.svm import LinearSVC
+from sklearn.feature_selection import SelectFromModel, SequentialFeatureSelector
 simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 
 def roster_brain_age_models():
@@ -46,6 +57,15 @@ def roster_feature_combinations(df):
     feat_combo['basic + WM age nonlinear + GM age (TSAN)'] = ['age', 'sex'] + [col for col in df.columns if '_wm_age_nonlinear' in col] + [col for col in df.columns if '_gm_age_tsan' in col]
     feat_combo['basic + WM age nonlinear + GM age (DeepBrainNet)'] = ['age', 'sex'] + [col for col in df.columns if '_wm_age_nonlinear' in col] + [col for col in df.columns if '_gm_age_dbn' in col]
     return feat_combo
+
+
+def roster_classifiers():
+    classifiers = {
+        'Logistic Regression': (LogisticRegression, {'random_state': 42, 'max_iter': 1000}),
+        'Linear SVM': (SVC, {'kernel': "linear", 'C': 1, 'probability': True, 'random_state': 42}),
+        'Random Forest': (RandomForestClassifier, {'max_depth': 5, 'n_estimators': 100, 'random_state': 42}),
+    }
+    return classifiers
 
 
 class DataPreparation:
@@ -282,81 +302,187 @@ class DataPreparation:
         axes[1].invert_xaxis()
         fig.savefig(png, dpi=300)
         
-    def get_matched_cn_data(self, df_master, df_subset, age_diff_threshold=1):
+    def get_matched_cn_data(self, df_master, df_subset, age_diff_threshold=1, mode='hungry'):
         """ Use greedy algorithm to sample a subset of cognitively normal data points from the main dataframe df_master.
         The subset matches the data points in df_subset in terms of age and sex. The greedy algorithm will prioritize 
         using subjects that are cognitively normal under the strict definition (cn_label==1). If the search does not find 
         any data points that satisfy the age_diff_threshold, the greedy algorithm will then use the subjects that are 
         cognitively normal under the loose definition (cn_label==0.5).
+            When hungry_mode is True, it is allowed to use more than one data points from the same subject in df_master,
+        as long as the data points are used to match the data points of the same subject in df_subset.
             The matched subset will be concatenated with df_subset and returned. There will be two new columns:
             - "clf_label": 1 for disease, and 0 for cognitively normal.
             - "match_id": the ID of the matched pair. (could be useful for pair-level split)
         """
-        if 'subj' not in df_master.columns:
-            df_master['subj'] = df_master['dataset'] + '_' + df_master['subject']
-        if 'subj' not in df_subset.columns:
-            df_subset['subj'] = df_subset['dataset'] + '_' + df_subset['subject']
+        if mode == 'hungry':
+            df_candidates = df_master.loc[df_master['cn_label']>=0.5, ].copy()
+            df_candidates['clf_label'] = 0
+            df_candidates['match_id'] = None
+            df_subset['clf_label'] = 1
+            df_subset['match_id'] = None
+            num_dp_total = len(df_subset.index)
+
+            match_id = 0
+            subj = None
+            stop_ct = 0
+
+            while stop_ct < 100:
+                todo_subjects = df_subset.loc[df_subset['match_id'].isna(), ].groupby('subj').size().sort_values(ascending=False).index
+                # print(f"Remaining subjects to match: {len(todo_subjects)} / {len(df_subset['subj'].unique())}")
+                if len(todo_subjects) == 0:
+                    print('All subjects matched.')
+                    break
+                elif len(todo_subjects)>10:
+                    subj = todo_subjects[0] if subj != todo_subjects[0] else random.choice(todo_subjects[1:])
+                else:
+                    subj = random.choice(todo_subjects)
+                
+                subj_c_most_match = None
+                subj_c_most_match_num = 0
+                for subj_c in df_candidates['subj'].unique():
+                    if subj_c in df_candidates.loc[df_candidates['match_id'].notna(), 'subj'].unique():
+                        continue  # because already used in previous match
+                    if df_candidates.loc[df_candidates['subj']==subj_c, 'sex'].values[0] != df_subset.loc[df_subset['subj']==subj, 'sex'].values[0]:
+                        continue
+                    
+                    matched_age_c = []
+                    for age in sorted(df_subset.loc[df_subset['subj']==subj, 'age'].unique()):
+                        for age_c in sorted(df_candidates.loc[df_candidates['subj']==subj_c, 'age'].unique()):
+                            if (abs(age_c - age) < age_diff_threshold) and (age_c not in matched_age_c):
+                                matched_age_c.append(age_c)
+                    if len(matched_age_c) > subj_c_most_match_num:
+                        subj_c_most_match = subj_c
+                        subj_c_most_match_num = len(matched_age_c)
+                
+                if subj_c_most_match is not None:
+                    for age in sorted(df_subset.loc[df_subset['subj']==subj, 'age'].unique()):
+                        for age_c in sorted(df_candidates.loc[(df_candidates['subj']==subj_c_most_match)&df_candidates['match_id'].isna(), 'age'].unique()):
+                            if abs(age_c - age) < age_diff_threshold:
+                                df_subset.loc[(df_subset['subj']==subj)&(df_subset['age']==age), 'match_id'] = match_id
+                                df_candidates.loc[(df_candidates['subj']==subj_c_most_match)&(df_candidates['age']==age_c), 'match_id'] = match_id
+                                match_id += 1
+                    num_dp_matched = len(df_subset.loc[df_subset['match_id'].notna(), ].index)
+                    print(f"Matched {subj_c_most_match_num} data points of {subj_c_most_match}. {num_dp_matched} (matched) / {num_dp_total} (total)")
+                    stop_ct = 0
+                else:
+                    stop_ct += 1
+                    print(f"Stop count: {stop_ct} / 100")
+            df_subset_matched = pd.concat([
+                df_subset.loc[df_subset['match_id'].notna(), ], 
+                df_candidates.loc[df_candidates['match_id'].notna(), ]])
         
-        df_subset_matched = pd.DataFrame()
-        match_id = 0
-        
-        for _, row in df_subset.iterrows():
-            used_subj = [] if len(df_subset_matched.index)==0 else df_subset_matched['subj'].unique().tolist()
-            assert row['subj'] not in used_subj, f"{row['subj']} appeared more than once, this should not happen."
-            
-            best_match = None
-            best_diff = age_diff_threshold
-            
-            for _, row_c in df_master.loc[df_master['cn_label']==1, ].iterrows():
-                if (row_c['subj'] in used_subj) or (row_c['sex'] != row['sex']):
-                    continue
-                age_diff = abs(row_c['age'] - row['age'])
-                if age_diff < best_diff:
-                    best_match = row_c
-                    best_diff = age_diff
-            
-            if best_match is None:
-                for _, row_c in df_master.loc[df_master['cn_label']==0.5, ].iterrows():
+        elif mode == 'allow_multiple_per_subject':
+            df_subset_matched = pd.DataFrame()
+            match_id = 0
+            for _, row in df_subset.iterrows():
+                used_subj = [] if len(df_subset_matched.index)==0 else df_subset_matched['subj'].unique().tolist()
+                
+                best_match = None
+                best_diff = age_diff_threshold
+                
+                for _, row_c in df_master.loc[df_master['cn_label']==1, ].iterrows():
+                    if row_c['sex'] != row['sex']:
+                        continue
+                    if row_c['subj'] in used_subj:
+                        where_this_subj_was_used = df_subset_matched.loc[df_subset_matched['subj']==row_c['subj'], 'match_id'].unique()
+                        where_this_subj_was_used = df_subset_matched.loc[df_subset_matched['match_id'].isin(where_this_subj_was_used), 'subj'].unique()
+                        if set(where_this_subj_was_used) != set([row_c['subj'], row['subj']]):
+                            continue
+                    age_diff = abs(row_c['age'] - row['age'])
+                    if age_diff < best_diff:
+                        best_match = row_c
+                        best_diff = age_diff
+                
+                if best_match is None:
+                    for _, row_c in df_master.loc[df_master['cn_label']==0.5, ].iterrows():
+                        if row_c['sex'] != row['sex']:
+                            continue
+                        if row_c['subj'] in used_subj:
+                            where_this_subj_was_used = df_subset_matched.loc[df_subset_matched['subj']==row_c['subj'], 'match_id'].unique()
+                            where_this_subj_was_used = df_subset_matched.loc[df_subset_matched['match_id'].isin(where_this_subj_was_used), 'subj'].unique()
+                            if set(where_this_subj_was_used) != set([row_c['subj'], row['subj']]):
+                                continue
+                        age_diff = abs(row_c['age'] - row['age'])
+                        if age_diff < best_diff:
+                            best_match = row_c
+                            best_diff = age_diff
+                
+                if best_match is not None:
+                    for r, clf_label in [(row, 1), (best_match, 0)]:
+                        r = r.to_frame().T
+                        r['clf_label'] = clf_label
+                        r['match_id'] = match_id
+                        df_subset_matched = pd.concat([df_subset_matched, r])
+                    match_id += 1
+                else:
+                    print(f'No match found for {row["subj"]}')
+        elif mode == 'lavish':
+            df_subset_matched = pd.DataFrame()
+            match_id = 0
+            for _, row in df_subset.iterrows():
+                used_subj = [] if len(df_subset_matched.index)==0 else df_subset_matched['subj'].unique().tolist()
+                
+                best_match = None
+                best_diff = age_diff_threshold
+                
+                for _, row_c in df_master.loc[df_master['cn_label']==1, ].iterrows():
                     if (row_c['subj'] in used_subj) or (row_c['sex'] != row['sex']):
                         continue
                     age_diff = abs(row_c['age'] - row['age'])
                     if age_diff < best_diff:
                         best_match = row_c
                         best_diff = age_diff
+                
+                if best_match is None:
+                    for _, row_c in df_master.loc[df_master['cn_label']==0.5, ].iterrows():
+                        if (row_c['subj'] in used_subj) or (row_c['sex'] != row['sex']):
+                            continue
+                        age_diff = abs(row_c['age'] - row['age'])
+                        if age_diff < best_diff:
+                            best_match = row_c
+                            best_diff = age_diff
+                
+                if best_match is not None:
+                    for r, clf_label in [(row, 1), (best_match, 0)]:
+                        r = r.to_frame().T
+                        r['clf_label'] = clf_label
+                        r['match_id'] = match_id
+                        df_subset_matched = pd.concat([df_subset_matched, r])
+                    match_id += 1
+                else:
+                    print(f'No match found for {row["subj"]}')
+        else:
+            raise ValueError(f'Unknown mode: {mode}')
             
-            if best_match is not None:
-                for r, clf_label in [(row, 1), (best_match, 0)]:
-                    r = r.to_frame().T
-                    r['clf_label'] = clf_label
-                    r['match_id'] = match_id
-                    df_subset_matched = pd.concat([df_subset_matched, r])
-                match_id += 1
-        
         return df_subset_matched
 
 
-class LeaveOneSubjectOutDataLoader:
-    def __init__(self, df, disease):
-        assert f'time_to_{disease}' in df.columns, f"Column 'time_to_{disease}' not found in the dataframe."
-        self.df = df.loc[df[f'time_to_{disease}']>=0, ].copy()
-        self.subjects = self.df['subj'].unique()
-        self.current_subject_index = 0
+# class LeaveOneSubjectOutDataLoader:
+#     """ Leave-one-subject-out data loader. 
+#     Given the dataframe (after DataPreparation.mark_progression_subjects_out is done), and the disease of interest,
+#     it will iterate through the subjects of interest, and return the dataframe of the left-out subject, and the rest.
+#     """
+#     def __init__(self, df, disease):
+#         assert f'time_to_{disease}' in df.columns, f"Column 'time_to_{disease}' not found in the dataframe."
+#         self.df = df.loc[df[f'time_to_{disease}']>=0, ].copy()
+#         self.subjects = self.df['subj'].unique()
+#         self.current_subject_index = 0
 
-    def __iter__(self):
-        return self
+#     def __iter__(self):
+#         return self
     
-    def __len__(self):
-        return len(self.subjects)
+#     def __len__(self):
+#         return len(self.subjects)
     
-    def __next__(self):
-        if self.current_subject_index < len(self.subjects):
-            subj = self.subjects[self.current_subject_index]
-            df_left_out_subj = self.df.loc[self.df['subj']==subj, ]
-            df_rest = self.df.loc[self.df['subj']!=subj, ]
-            self.current_subject_index += 1
-            return df_left_out_subj, df_rest
-        else:
-            raise StopIteration
+#     def __next__(self):
+#         if self.current_subject_index < len(self.subjects):
+#             subj = self.subjects[self.current_subject_index]
+#             df_left_out_subj = self.df.loc[self.df['subj']==subj, ]
+#             df_rest = self.df.loc[self.df['subj']!=subj, ]
+#             self.current_subject_index += 1
+#             return df_left_out_subj, df_rest
+#         else:
+#             raise StopIteration
 
 
 if __name__ == '__main__':
@@ -367,6 +493,7 @@ if __name__ == '__main__':
     DISEASE = args.disease
     BIAS_CORRECTION = not args.wobc
 
+    # Data Preparation
     data_prep = DataPreparation(roster_brain_age_models(), '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti_v2.csv')
     df = data_prep.load_predictions_of_all_models(bias_correction=BIAS_CORRECTION)
     df = data_prep.retrieve_diagnosis_label(df)
@@ -374,8 +501,21 @@ if __name__ == '__main__':
     df = data_prep.feature_engineering(df)
     df = data_prep.mark_progression_subjects_out(df)
     data_prep.visualize_data_points(df, f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_progression_data_points_{DISEASE}.png', disease=DISEASE)
+    df.to_csv('experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/data_prep.csv', index=False)
+    df = pd.read_csv('experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/data_prep.csv')
 
-    df_master = df.copy()
+    # Data Matching
+    df_interest = df.loc[df[f'time_to_{DISEASE}']>=0, ].copy()
+    modes = ['lavish', 'allow_multiple_per_subject', 'hungry']
+    for mode in modes:
+        df_interest_matched = data_prep.get_matched_cn_data(df_master=df, df_subset=df_interest, age_diff_threshold=1, mode=mode)
+        df_interest_matched.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/matched_dataset_{DISEASE}_{mode}.csv', index=False)
+    # # Leave-one-subject-out prediction for each classifier-feature pair
+    # df_master = df.copy()
+    # for df_left_out_subj, df_rest in tqdm(LeaveOneSubjectOutDataLoader(df_master, DISEASE), desc='Leave-one-subject-out loop'):
+    #     df_rest_matched = data_prep.get_matched_cn_data(df_master, df_rest)
 
-    for df_left_out_subj, df_rest in LeaveOneSubjectOutDataLoader(df_master, DISEASE):
-        print(len(df_left_out_subj.index),len(df_rest.index))
+    #     results = train_and_predict_with_clf_feat_combinations(df_train=df_rest_matched, df_test=df_left_out_subj, 
+
+
+    #     pass
