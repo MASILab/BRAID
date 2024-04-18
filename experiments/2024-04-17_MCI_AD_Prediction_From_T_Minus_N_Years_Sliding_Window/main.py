@@ -282,60 +282,64 @@ class DataPreparation:
         axes[1].invert_xaxis()
         fig.savefig(png, dpi=300)
         
-#     def get_matched_cn_data(self, df_main, df_subset, age_diff_threshold=1):
-#         """ Use greedy algorithm to sample a subset of cognitively normal data points from the main dataframe df_main.
-#         The subset matches the data points in df_subset in terms of age and sex.
-#             The greedy algorithm will prioritize using the subjects that are cognitively normal under the strict definition.
-#         If the search does not find any data points that satisfy the age_diff_threshold, 
-#         the greedy algorithm will then use the subjects that are cognitively normal under the loose definition.
-#             The subset will be concatenated with df_subset to form a new dataframe.
-#         """        
-#         if 'subj' not in df_main.columns:
-#             df_main['subj'] = df_main['dataset'] + '_' + df_main['subject']
-#         if 'subj' not in df_subset.columns:
-#             df_subset['subj'] = df_subset['dataset'] + '_' + df_subset['subject']
+    def get_matched_cn_data(self, df_master, df_subset, age_diff_threshold=1):
+        """ Use greedy algorithm to sample a subset of cognitively normal data points from the main dataframe df_master.
+        The subset matches the data points in df_subset in terms of age and sex. The greedy algorithm will prioritize 
+        using subjects that are cognitively normal under the strict definition (cn_label==1). If the search does not find 
+        any data points that satisfy the age_diff_threshold, the greedy algorithm will then use the subjects that are 
+        cognitively normal under the loose definition (cn_label==0.5).
+            The matched subset will be concatenated with df_subset and returned. There will be two new columns:
+            - "clf_label": 1 for disease, and 0 for cognitively normal.
+            - "match_id": the ID of the matched pair. (could be useful for pair-level split)
+        """
+        if 'subj' not in df_master.columns:
+            df_master['subj'] = df_master['dataset'] + '_' + df_master['subject']
+        if 'subj' not in df_subset.columns:
+            df_subset['subj'] = df_subset['dataset'] + '_' + df_subset['subject']
         
-#         df_matched = pd.DataFrame()
-#         match_id = 0
+        df_subset_matched = pd.DataFrame()
+        match_id = 0
         
-#         for _, row in df_subset.iterrows():
-#             used_subj = [] if len(df_matched.index)==0 else df_matched['subj'].unique().tolist()
-#             assert row['subj'] not in used_subj, f"{row['subj']} appeared more than once, this should not happen."
+        for _, row in df_subset.iterrows():
+            used_subj = [] if len(df_subset_matched.index)==0 else df_subset_matched['subj'].unique().tolist()
+            assert row['subj'] not in used_subj, f"{row['subj']} appeared more than once, this should not happen."
             
-#             best_match = None
-#             best_diff = age_diff_threshold
+            best_match = None
+            best_diff = age_diff_threshold
             
-#             for _, row_c in df_main.loc[df_main['cn_label']==1, ].iterrows():
-#                 if (row_c['subj'] in used_subj) or (row_c['sex'] != row['sex']):
-#                     continue
-#                 age_diff = abs(row_c['age'] - row['age'])
-#                 if age_diff < best_diff:
-#                     best_match = row_c
-#                     best_diff = age_diff
+            for _, row_c in df_master.loc[df_master['cn_label']==1, ].iterrows():
+                if (row_c['subj'] in used_subj) or (row_c['sex'] != row['sex']):
+                    continue
+                age_diff = abs(row_c['age'] - row['age'])
+                if age_diff < best_diff:
+                    best_match = row_c
+                    best_diff = age_diff
             
-#             if best_match is None:
-#                 for _, row_c in df_main.loc[df_main['cn_label']==0.5, ].iterrows():
-#                     if (row_c['subj'] in used_subj) or (row_c['sex'] != row['sex']):
-#                         continue
-#                     age_diff = abs(row_c['age'] - row['age'])
-#                     if age_diff < best_diff:
-#                         best_match = row_c
-#                         best_diff = age_diff
+            if best_match is None:
+                for _, row_c in df_master.loc[df_master['cn_label']==0.5, ].iterrows():
+                    if (row_c['subj'] in used_subj) or (row_c['sex'] != row['sex']):
+                        continue
+                    age_diff = abs(row_c['age'] - row['age'])
+                    if age_diff < best_diff:
+                        best_match = row_c
+                        best_diff = age_diff
             
-#             if best_match is not None:
-#                 for r, clf_label in [(row, 1), (best_match, 0)]:
-#                     r = r.to_frame().T
-#                     r['clf_label'] = clf_label
-#                     r['match_id'] = match_id
-#                     df_matched = pd.concat([df_matched, r])
-#                 match_id += 1
+            if best_match is not None:
+                for r, clf_label in [(row, 1), (best_match, 0)]:
+                    r = r.to_frame().T
+                    r['clf_label'] = clf_label
+                    r['match_id'] = match_id
+                    df_subset_matched = pd.concat([df_subset_matched, r])
+                match_id += 1
         
-#         return df_matched
+        return df_subset_matched
     
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--', type=bool, default=True, help='whether to use bias corrected predictions or not')
-    parser.add_argument('--disease', type=str, default='MCI')
+    parser = argparse.ArgumentParser(description='"T-0,T-1,...,T-N" MCI/AD prediction experiment')
+    parser.add_argument('--wobc', action='store_true', help='when this flag is given, load predictions that are not bias-corrected')
+    parser.add_argument('--disease', type=str, default='MCI', help='either "MCI" or "AD"')
     args = parser.parse_args()
+    
+    data_prep = DataPreparation(roster_brain_age_models(), '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti_v2.csv')
