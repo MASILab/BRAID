@@ -333,7 +333,30 @@ class DataPreparation:
                 match_id += 1
         
         return df_subset_matched
+
+
+class LeaveOneSubjectOutDataLoader:
+    def __init__(self, df, disease):
+        assert f'time_to_{disease}' in df.columns, f"Column 'time_to_{disease}' not found in the dataframe."
+        self.df = df.loc[df[f'time_to_{disease}']>=0, ].copy()
+        self.subjects = self.df['subj'].unique()
+        self.current_subject_index = 0
+
+    def __iter__(self):
+        return self
     
+    def __len__(self):
+        return len(self.subjects)
+    
+    def __next__(self):
+        if self.current_subject_index < len(self.subjects):
+            subj = self.subjects[self.current_subject_index]
+            df_left_out_subj = self.df.loc[self.df['subj']==subj, ]
+            df_rest = self.df.loc[self.df['subj']!=subj, ]
+            self.current_subject_index += 1
+            return df_left_out_subj, df_rest
+        else:
+            raise StopIteration
 
 
 if __name__ == '__main__':
@@ -341,5 +364,18 @@ if __name__ == '__main__':
     parser.add_argument('--wobc', action='store_true', help='when this flag is given, load predictions that are not bias-corrected')
     parser.add_argument('--disease', type=str, default='MCI', help='either "MCI" or "AD"')
     args = parser.parse_args()
-    
+    DISEASE = args.disease
+    BIAS_CORRECTION = not args.wobc
+
     data_prep = DataPreparation(roster_brain_age_models(), '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti_v2.csv')
+    df = data_prep.load_predictions_of_all_models(bias_correction=BIAS_CORRECTION)
+    df = data_prep.retrieve_diagnosis_label(df)
+    df = data_prep.assign_cn_label(df)
+    df = data_prep.feature_engineering(df)
+    df = data_prep.mark_progression_subjects_out(df)
+    data_prep.visualize_data_points(df, f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_progression_data_points_{DISEASE}.png', disease=DISEASE)
+
+    df_master = df.copy()
+
+    for df_left_out_subj, df_rest in LeaveOneSubjectOutDataLoader(df_master, DISEASE):
+        print(len(df_left_out_subj.index),len(df_rest.index))
