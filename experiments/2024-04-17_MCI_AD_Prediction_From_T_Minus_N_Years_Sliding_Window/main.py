@@ -47,7 +47,7 @@ def roster_brain_age_models():
 
 
 def roster_feature_combinations(df):
-    feat_combo = {'basic: chronological age + sex)': ['age', 'sex']}
+    feat_combo = {'basic: chronological age + sex': ['age', 'sex']}
     feat_combo['basic + WM age nonlinear'] = ['age', 'sex'] + [col for col in df.columns if '_wm_age_nonlinear' in col]
     feat_combo['basic + GM age (ours)'] = ['age', 'sex'] + [col for col in df.columns if '_gm_age_ours' in col]
     feat_combo['basic + GM age (TSAN)'] = ['age', 'sex'] + [col for col in df.columns if '_gm_age_tsan' in col]
@@ -474,32 +474,33 @@ class DataPreparation:
         return df_subset_matched
 
 
-# class LeaveOneSubjectOutDataLoader:
-#     """ Leave-one-subject-out data loader. 
-#     Given the dataframe (after DataPreparation.mark_progression_subjects_out is done), and the disease of interest,
-#     it will iterate through the subjects of interest, and return the dataframe of the left-out subject, and the rest.
-#     """
-#     def __init__(self, df, disease):
-#         assert f'time_to_{disease}' in df.columns, f"Column 'time_to_{disease}' not found in the dataframe."
-#         self.df = df.loc[df[f'time_to_{disease}']>=0, ].copy()
-#         self.subjects = self.df['subj'].unique()
-#         self.current_subject_index = 0
-
-#     def __iter__(self):
-#         return self
+class LeaveOneSubjectOutDataLoader:
+    """ Leave-one-subject-out data loader. 
+    Given the dataframe (after CN data point matching), and the disease of interest,
+    it will iterate through the subjects, each time returning the dataframe of the left-out subject (and matched CN data points)
+    and the dataframe of all other subjects (and their matched CN data points)
+    """
+    def __init__(self, df, disease):
+        self.df = df
+        self.subjects_interest = df.loc[df[f'time_to_{disease}']>=0, 'subj'].unique()
+        self.current_subject_index = 0
     
-#     def __len__(self):
-#         return len(self.subjects)
+    def __iter__(self):
+        return self
     
-#     def __next__(self):
-#         if self.current_subject_index < len(self.subjects):
-#             subj = self.subjects[self.current_subject_index]
-#             df_left_out_subj = self.df.loc[self.df['subj']==subj, ]
-#             df_rest = self.df.loc[self.df['subj']!=subj, ]
-#             self.current_subject_index += 1
-#             return df_left_out_subj, df_rest
-#         else:
-#             raise StopIteration
+    def __len__(self):
+        return len(self.subjects_interest)    
+    
+    def __next__(self):
+        if self.current_subject_index < len(self.subjects_interest):
+            subj = self.subjects_interest[self.current_subject_index]
+            subj_match_id = self.df.loc[self.df['subj']==subj, 'match_id'].unique()
+            df_left_out_subj = self.df.loc[self.df['match_id'].isin(subj_match_id), ]
+            df_rest = self.df.loc[~self.df['match_id'].isin(subj_match_id), ]
+            self.current_subject_index += 1
+            return df_left_out_subj, df_rest
+        else:
+            raise StopIteration
 
 
 if __name__ == '__main__':
@@ -515,22 +516,57 @@ if __name__ == '__main__':
     DISEASE = args.disease
     BIAS_CORRECTION = not args.wobc
 
-    # Data Preparation
-    data_prep = DataPreparation(roster_brain_age_models(), '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti_v2.csv')
-    df = data_prep.load_predictions_of_all_models(bias_correction=BIAS_CORRECTION)
-    df = data_prep.retrieve_diagnosis_label(df)
-    df = data_prep.assign_cn_label(df)
-    df = data_prep.feature_engineering(df)
-    df = data_prep.mark_progression_subjects_out(df)
-    data_prep.visualize_data_points(df, f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_progression_data_points_{DISEASE}.png', disease=DISEASE)
-    df.to_csv('experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/data_prep.csv', index=False)
-    df = pd.read_csv('experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/data_prep.csv')
+    # # Data Preparation
+    # data_prep = DataPreparation(roster_brain_age_models(), '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti_v2.csv')
+    # df = data_prep.load_predictions_of_all_models(bias_correction=BIAS_CORRECTION)
+    # df = data_prep.retrieve_diagnosis_label(df)
+    # df = data_prep.assign_cn_label(df)
+    # df = data_prep.feature_engineering(df)
+    # df = data_prep.mark_progression_subjects_out(df)
+    # data_prep.visualize_data_points(df, f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_progression_data_points_{DISEASE}.png', disease=DISEASE)
+    # df.to_csv('experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/data_prep.csv', index=False)
+    # df = pd.read_csv('experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/data_prep.csv')
 
-    # Data Matching
-    df_interest = df.loc[df[f'time_to_{DISEASE}']>=0, ].copy()
-    df_interest_matched = data_prep.get_matched_cn_data(df_master=df, df_subset=df_interest, age_diff_threshold=1, mode=args.match_mode)
-    df_interest_matched.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/matched_dataset_{DISEASE}_{args.match_mode}.csv', index=False)
+    # # Data Matching
+    # df_interest = df.loc[df[f'time_to_{DISEASE}']>=0, ].copy()
+    # df_interest_matched = data_prep.get_matched_cn_data(df_master=df, df_subset=df_interest, age_diff_threshold=1, mode=args.match_mode)
+    # df_interest_matched.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/matched_dataset_{DISEASE}_{args.match_mode}.csv', index=False)
     df_interest_matched = pd.read_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/matched_dataset_{DISEASE}_{args.match_mode}.csv')
-    data_prep.visualize_data_points(df, f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_progression_data_points_{DISEASE}_matched_with_{args.match_mode}.png', disease=DISEASE, df_matched=df_interest_matched, markout_matched_dp=True)
+    # data_prep.visualize_data_points(df, f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_progression_data_points_{DISEASE}_matched_with_{args.match_mode}.png', disease=DISEASE, df_matched=df_interest_matched, markout_matched_dp=True)
     
     # Leave-one-subject-out prediction for each classifier-feature pair
+    classifiers = roster_classifiers()
+    feat_combo = roster_feature_combinations(df_interest_matched)
+    prediction_results = pd.DataFrame()
+
+    for df_left_out_subj, df_rest in tqdm(LeaveOneSubjectOutDataLoader(df_interest_matched, DISEASE), desc='Leave-one-subject-out prediction'):
+        for feat_combo_name, feat_cols in feat_combo.items():
+            for clf_name, (clf, clf_params) in classifiers.items():
+                X = df_rest[feat_cols].values
+                y = df_rest['clf_label'].values
+                X_left_out = df_left_out_subj[feat_cols].values
+                y_left_out = df_left_out_subj['clf_label'].values
+                
+                # min-max normalization
+                scaling = MinMaxScaler(feature_range=(-1,1)).fit(X)
+                X = scaling.transform(X)
+                X_left_out = scaling.transform(X_left_out)
+                        
+                # impute missing values
+                imputer = SimpleImputer(strategy='mean')
+                imputer.fit(X)
+                X = imputer.transform(X)
+                X_left_out = imputer.transform(X_left_out)
+
+                # classification
+                clf_instance = clf(**clf_params)
+                clf_instance.fit(X, y)
+                y_pred_proba = clf_instance.predict_proba(X_left_out)
+                
+                # record the prediction results
+                results = df_left_out_subj.copy()
+                results['feat_combo_name'] = feat_combo_name
+                results['clf_name'] = clf_name
+                results['y_pred_proba'] = y_pred_proba[:,1]
+                prediction_results = pd.concat([prediction_results, results], ignore_index=True)
+    prediction_results.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_results_{DISEASE}_{args.match_mode}.csv', index=False)
