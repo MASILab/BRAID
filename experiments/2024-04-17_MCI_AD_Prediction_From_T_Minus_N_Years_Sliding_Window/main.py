@@ -261,9 +261,11 @@ class DataPreparation:
         
         return df
 
-    def visualize_data_points(self, df, png, disease='MCI'):
+    def visualize_data_points(self, df, png, disease='MCI', df_matched=None, markout_matched_dp=False):
         """ Visualize the chronological age, and time to AD/MCI of the data points 
         of subjects who have progressed from cognitively normal to MCI or AD.
+            If markout_matched_dp is True, the data points which have been matched with CN data points
+        will be marked out with a vertical line.
         """
         df = df.loc[df[f'age_{disease}'].notna(), ].copy()
         if 'subj' not in df.columns:
@@ -274,6 +276,12 @@ class DataPreparation:
         for i, subj in enumerate(df['subj'].unique()):
             df.loc[df['subj']==subj, 'y_subject'] = i
         
+        if markout_matched_dp:
+            df_matched = df_matched.loc[df_matched[f'time_to_{disease}'].notna(), ].copy()
+            df_matched['y_subject'] = None
+            for subj in df_matched['subj'].unique():
+                df_matched.loc[df_matched['subj']==subj, 'y_subject'] = df.loc[df['subj']==subj, 'y_subject'].values[0]
+
         fig, axes = plt.subplots(1, 2, figsize=(12, 12))
         
         for ax_id, x_axis in enumerate(['age', f'time_to_{disease}']):            
@@ -297,6 +305,16 @@ class DataPreparation:
                 alpha=1,
                 ax=axes[ax_id]
                 )
+            
+            if markout_matched_dp:
+                axes[ax_id].scatter(
+                    df_matched[x_axis], df_matched['y_subject'],
+                    c='k',
+                    marker='|',
+                    label='with matched CN data point'
+                )
+                axes[ax_id].legend()
+
             axes[ax_id].set_xlabel(f'{x_axis} (years)', fontsize=16, fontfamily='DejaVu Sans')
             axes[ax_id].set_ylabel('Subject', fontsize=16, fontfamily='DejaVu Sans')  
         axes[1].invert_xaxis()
@@ -328,7 +346,6 @@ class DataPreparation:
 
             while stop_ct < 100:
                 todo_subjects = df_subset.loc[df_subset['match_id'].isna(), ].groupby('subj').size().sort_values(ascending=False).index
-                # print(f"Remaining subjects to match: {len(todo_subjects)} / {len(df_subset['subj'].unique())}")
                 if len(todo_subjects) == 0:
                     print('All subjects matched.')
                     break
@@ -346,8 +363,8 @@ class DataPreparation:
                         continue
                     
                     matched_age_c = []
-                    for age in sorted(df_subset.loc[df_subset['subj']==subj, 'age'].unique()):
-                        for age_c in sorted(df_candidates.loc[df_candidates['subj']==subj_c, 'age'].unique()):
+                    for age in sorted(df_subset.loc[(df_subset['subj']==subj)&df_subset['match_id'].isna(), 'age'].unique()):
+                        for age_c in sorted(df_candidates.loc[(df_candidates['subj']==subj_c)&df_candidates['match_id'].isna(), 'age'].unique()):
                             if (abs(age_c - age) < age_diff_threshold) and (age_c not in matched_age_c):
                                 matched_age_c.append(age_c)
                     if len(matched_age_c) > subj_c_most_match_num:
@@ -489,6 +506,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='"T-0,T-1,...,T-N" MCI/AD prediction experiment')
     parser.add_argument('--wobc', action='store_true', help='when this flag is given, load predictions that are not bias-corrected')
     parser.add_argument('--disease', type=str, default='MCI', help='either "MCI" or "AD"')
+    parser.add_argument('--match_mode', type=str, default='hungry', help=(
+        'either "hungry", "allow_multiple_per_subject", or "lavish". ' 
+        '"hungry" uses the most greedy approach and thus will result in the most matched data points. '
+        '"allow_multiple_per_subject" allows multiple data points from the same subject to be used for matching. '
+        '"lavish" will use only one data point from each subject.'))
     args = parser.parse_args()
     DISEASE = args.disease
     BIAS_CORRECTION = not args.wobc
@@ -506,16 +528,9 @@ if __name__ == '__main__':
 
     # Data Matching
     df_interest = df.loc[df[f'time_to_{DISEASE}']>=0, ].copy()
-    modes = ['lavish', 'allow_multiple_per_subject', 'hungry']
-    for mode in modes:
-        df_interest_matched = data_prep.get_matched_cn_data(df_master=df, df_subset=df_interest, age_diff_threshold=1, mode=mode)
-        df_interest_matched.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/matched_dataset_{DISEASE}_{mode}.csv', index=False)
-    # # Leave-one-subject-out prediction for each classifier-feature pair
-    # df_master = df.copy()
-    # for df_left_out_subj, df_rest in tqdm(LeaveOneSubjectOutDataLoader(df_master, DISEASE), desc='Leave-one-subject-out loop'):
-    #     df_rest_matched = data_prep.get_matched_cn_data(df_master, df_rest)
-
-    #     results = train_and_predict_with_clf_feat_combinations(df_train=df_rest_matched, df_test=df_left_out_subj, 
-
-
-    #     pass
+    df_interest_matched = data_prep.get_matched_cn_data(df_master=df, df_subset=df_interest, age_diff_threshold=1, mode=args.match_mode)
+    df_interest_matched.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/matched_dataset_{DISEASE}_{args.match_mode}.csv', index=False)
+    df_interest_matched = pd.read_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/matched_dataset_{DISEASE}_{args.match_mode}.csv')
+    data_prep.visualize_data_points(df, f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_progression_data_points_{DISEASE}_matched_with_{args.match_mode}.png', disease=DISEASE, df_matched=df_interest_matched, markout_matched_dp=True)
+    
+    # Leave-one-subject-out prediction for each classifier-feature pair
