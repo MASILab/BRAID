@@ -108,6 +108,9 @@ class DataPreparation:
             else:
                 df = df.merge(df_model.copy(), on=['dataset','subject','session','sex','age'])
         
+        # remove duplicated rows (e.g., ses-270scanner09, ses-270scanner10 in BLSA)
+        df = df.sort_values(by=['dataset', 'subject', 'age', 'session'], ignore_index=True)
+        df = df.drop_duplicates(subset=['dataset', 'subject', 'age'], keep='last', ignore_index=True)
         print(f"Predictions loaded. DataFrame shape: {df.shape}")
         return df
     
@@ -326,8 +329,13 @@ class DataPreparation:
         using subjects that are cognitively normal under the strict definition (cn_label==1). If the search does not find 
         any data points that satisfy the age_diff_threshold, the greedy algorithm will then use the subjects that are 
         cognitively normal under the loose definition (cn_label==0.5).
-            When hungry_mode is True, it is allowed to use more than one data points from the same subject in df_master,
-        as long as the data points are used to match the data points of the same subject in df_subset.
+            When mode==allow_multiple_per_subject, it is allowed to use more than one data points from the same subject 
+        in df_master, as long as the data points are used to match the data points of the same subject in df_subset.
+            When mode==hungry, the algorithm will try to match as many data points as possible. It will start from the 
+        subjects in the df_subset that have the most data points to be matched, and use the subject in df_master that has
+        the most matched data points to match with. It tends to prioritize using subjects that are cognitively normal under
+        the strict definition. But unlike the "allow_multiple_per_subject" and "lavish" mode, it achieves such prioritization
+        as a result of the data-intrinsic property, rather than by programmed rule.
             The matched subset will be concatenated with df_subset and returned. There will be two new columns:
             - "clf_label": 1 for disease, and 0 for cognitively normal.
             - "match_id": the ID of the matched pair. (could be useful for pair-level split)
@@ -344,7 +352,7 @@ class DataPreparation:
             subj = None
             stop_ct = 0
 
-            while stop_ct < 100:
+            while stop_ct < 200:
                 todo_subjects = df_subset.loc[df_subset['match_id'].isna(), ].groupby('subj').size().sort_values(ascending=False).index
                 if len(todo_subjects) == 0:
                     print('All subjects matched.')
@@ -367,23 +375,31 @@ class DataPreparation:
                         for age_c in sorted(df_candidates.loc[(df_candidates['subj']==subj_c)&df_candidates['match_id'].isna(), 'age'].unique()):
                             if (abs(age_c - age) < age_diff_threshold) and (age_c not in matched_age_c):
                                 matched_age_c.append(age_c)
+                                break
+
                     if len(matched_age_c) > subj_c_most_match_num:
                         subj_c_most_match = subj_c
                         subj_c_most_match_num = len(matched_age_c)
                 
                 if subj_c_most_match is not None:
-                    for age in sorted(df_subset.loc[df_subset['subj']==subj, 'age'].unique()):
+                    ct_add = 0
+                    matched_age_c = []
+                    for age in sorted(df_subset.loc[(df_subset['subj']==subj)&df_subset['match_id'].isna(), 'age'].unique()):
                         for age_c in sorted(df_candidates.loc[(df_candidates['subj']==subj_c_most_match)&df_candidates['match_id'].isna(), 'age'].unique()):
-                            if abs(age_c - age) < age_diff_threshold:
+                            if (abs(age_c - age) < age_diff_threshold) and (age_c not in matched_age_c):
                                 df_subset.loc[(df_subset['subj']==subj)&(df_subset['age']==age), 'match_id'] = match_id
                                 df_candidates.loc[(df_candidates['subj']==subj_c_most_match)&(df_candidates['age']==age_c), 'match_id'] = match_id
                                 match_id += 1
+                                ct_add += 1
+                                break
+
+                    assert ct_add == subj_c_most_match_num, f'ct_add: {ct_add}, subj_c_most_match_num: {subj_c_most_match_num}'
                     num_dp_matched = len(df_subset.loc[df_subset['match_id'].notna(), ].index)
                     print(f"Matched {subj_c_most_match_num} data points of {subj_c_most_match}. {num_dp_matched} (matched) / {num_dp_total} (total)")
                     stop_ct = 0
                 else:
                     stop_ct += 1
-                    print(f"Stop count: {stop_ct} / 100")
+                    print(f"Stop count: {stop_ct} / 200")
             df_subset_matched = pd.concat([
                 df_subset.loc[df_subset['match_id'].notna(), ], 
                 df_candidates.loc[df_candidates['match_id'].notna(), ]])
@@ -516,27 +532,27 @@ if __name__ == '__main__':
     DISEASE = args.disease
     BIAS_CORRECTION = not args.wobc
 
-    # # Data Preparation
-    # data_prep = DataPreparation(roster_brain_age_models(), '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti_v2.csv')
-    # df = data_prep.load_predictions_of_all_models(bias_correction=BIAS_CORRECTION)
-    # df = data_prep.retrieve_diagnosis_label(df)
-    # df = data_prep.assign_cn_label(df)
-    # df = data_prep.feature_engineering(df)
-    # df = data_prep.mark_progression_subjects_out(df)
-    # data_prep.visualize_data_points(df, f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_progression_data_points_{DISEASE}.png', disease=DISEASE)
-    # df.to_csv('experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/data_prep.csv', index=False)
-    # df = pd.read_csv('experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/data_prep.csv')
+    # Data Preparation
+    data_prep = DataPreparation(roster_brain_age_models(), '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti_v2.csv')
+    df = data_prep.load_predictions_of_all_models(bias_correction=BIAS_CORRECTION)
+    df = data_prep.retrieve_diagnosis_label(df)
+    df = data_prep.assign_cn_label(df)
+    df = data_prep.feature_engineering(df)
+    df = data_prep.mark_progression_subjects_out(df)
+    data_prep.visualize_data_points(df, f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_progression_data_points_{DISEASE}.png', disease=DISEASE)
+    df.to_csv('experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/data_prep.csv', index=False)
+    df = pd.read_csv('experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/data_prep.csv')
 
-    # # Data Matching
-    # df_interest = df.loc[df[f'time_to_{DISEASE}']>=0, ].copy()
-    # df_interest_matched = data_prep.get_matched_cn_data(df_master=df, df_subset=df_interest, age_diff_threshold=1, mode=args.match_mode)
-    # df_interest_matched.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/matched_dataset_{DISEASE}_{args.match_mode}.csv', index=False)
+    # Data Matching
+    df_interest = df.loc[df[f'time_to_{DISEASE}']>=0, ].copy()
+    df_interest_matched = data_prep.get_matched_cn_data(df_master=df, df_subset=df_interest, age_diff_threshold=1, mode=args.match_mode)
+    df_interest_matched.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/matched_dataset_{DISEASE}_{args.match_mode}.csv', index=False)
     df_interest_matched = pd.read_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/matched_dataset_{DISEASE}_{args.match_mode}.csv')
-    # data_prep.visualize_data_points(df, f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_progression_data_points_{DISEASE}_matched_with_{args.match_mode}.png', disease=DISEASE, df_matched=df_interest_matched, markout_matched_dp=True)
+    data_prep.visualize_data_points(df, f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_progression_data_points_{DISEASE}_matched_with_{args.match_mode}.png', disease=DISEASE, df_matched=df_interest_matched, markout_matched_dp=True)
     
     # Leave-one-subject-out prediction for each classifier-feature pair
     classifiers = roster_classifiers()
-    feat_combo = roster_feature_combinations(df_interest_matched)
+    feat_combo = roster_feature_combinations(df)
     prediction_results = pd.DataFrame()
 
     for df_left_out_subj, df_rest in tqdm(LeaveOneSubjectOutDataLoader(df_interest_matched, DISEASE), desc='Leave-one-subject-out prediction'):
@@ -564,9 +580,17 @@ if __name__ == '__main__':
                 y_pred_proba = clf_instance.predict_proba(X_left_out)
                 
                 # record the prediction results
-                results = df_left_out_subj.copy()
+                results = df_left_out_subj[['subj','sex','age','diagnosis','cn_label',f'age_{DISEASE}',f'time_to_{DISEASE}','clf_label','match_id']].copy()
                 results['feat_combo_name'] = feat_combo_name
                 results['clf_name'] = clf_name
-                results['y_pred_proba'] = y_pred_proba[:,1]
+                results['y_pred_proba_0'] = y_pred_proba[:,0]
+                results['y_pred_proba_1'] = y_pred_proba[:,1]
                 prediction_results = pd.concat([prediction_results, results], ignore_index=True)
     prediction_results.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_results_{DISEASE}_{args.match_mode}.csv', index=False)
+    
+    # # Sliding window and AUC bootstrap
+    # window_size = 1
+    # window_step = 0.5
+
+    # dict_windowed_results = {0: prediction_results.loc[prediction_results[f'time_to_{DISEASE}']==0, ].copy()}
+    
