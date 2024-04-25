@@ -70,7 +70,7 @@ def roster_classifiers():
     classifiers = {
         'Logistic Regression': (LogisticRegression, {'random_state': 42, 'max_iter': 1000}),
         'Linear SVM': (SVC, {'kernel': "linear", 'C': 1, 'probability': True, 'random_state': 42}),
-        'Random Forest': (RandomForestClassifier, {'max_depth': 5, 'n_estimators': 100, 'random_state': 42}),
+        'Random Forest': (RandomForestClassifier, {'n_estimators': 100, 'random_state': 42}),
     }
     return classifiers
 
@@ -398,8 +398,7 @@ class DataPreparation:
                         r['match_id'] = match_id
                         df_subset_matched = pd.concat([df_subset_matched, r])
                     match_id += 1
-                else:
-                    print(f'No match found for {row["subj"]}')
+                    
         elif mode == 'lavish':
             df_subset_matched = pd.DataFrame()
             match_id = 0
@@ -574,6 +573,7 @@ class LeaveOneSubjectOutDataLoader:
         else:
             raise StopIteration
 
+
 def visualize_t_minus_n_prediction_results(df_aucs, dict_windowed_results, png):
     # hyperparameters
     fontsize = 9
@@ -640,7 +640,7 @@ def visualize_t_minus_n_prediction_results(df_aucs, dict_windowed_results, png):
                 y1=data['auc_upper'].values,
                 y2=data['auc_lower'].values,
                 color=dict_feat_combos[feat_combo]['color'],
-                alpha=dict_feat_combos[feat_combo]['alpha']*0.5,
+                alpha=dict_feat_combos[feat_combo]['alpha']*0.2,
                 linewidth=0)
         ax.vlines(x=df_aucs[timetoevent_col].unique(), ymin=0, ymax=1, transform=ax.get_xaxis_transform(), color='black', linestyle='--', linewidth=linewidth, alpha=0.2)
         ax.text(0.02, 0.95, classifier, fontsize=fontsize, fontfamily=fontfamily, transform=ax.transAxes, verticalalignment='top')
@@ -699,45 +699,47 @@ if __name__ == '__main__':
     df_interest_matched.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/matched_dataset_{DISEASE}_{args.match_mode}.csv', index=False)
     df_interest_matched = pd.read_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/matched_dataset_{DISEASE}_{args.match_mode}.csv')
     data_prep.visualize_data_points(df, df_interest_matched, png=f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_progression_data_points_{DISEASE}_matched_with_{args.match_mode}.png', disease='MCI', markout_matched_dp=True)
-    # # Leave-one-subject-out prediction for each classifier-feature pair
-    # classifiers = roster_classifiers()
-    # feat_combo = roster_feature_combinations(df)
-    # prediction_results = pd.DataFrame()
+    
+    # Leave-one-subject-out prediction for each classifier-feature pair
+    classifiers = roster_classifiers()
+    feat_combo = roster_feature_combinations(df)
+    prediction_results = pd.DataFrame()
 
-    # for df_left_out_subj, df_rest in tqdm(LeaveOneSubjectOutDataLoader(df_interest_matched, DISEASE), desc='Leave-one-subject-out prediction'):
-    #     for feat_combo_name, feat_cols in feat_combo.items():
-    #         for clf_name, (clf, clf_params) in classifiers.items():
-    #             X = df_rest[feat_cols].values
-    #             y = df_rest['clf_label'].values
-    #             X_left_out = df_left_out_subj[feat_cols].values
-    #             y_left_out = df_left_out_subj['clf_label'].values
+    for df_left_out_subj, df_rest in tqdm(LeaveOneSubjectOutDataLoader(df_interest_matched, DISEASE), desc='Leave-one-subject-out prediction'):        
+        for feat_combo_name, feat_cols in feat_combo.items():
+            for clf_name, (clf, clf_params) in classifiers.items():
+                X_rest = df_rest[feat_cols].values
+                y_rest = df_rest['clf_label'].values
+                X_left_out = df_left_out_subj[feat_cols].values
+                y_left_out = df_left_out_subj['clf_label'].values
                 
-    #             # min-max normalization
-    #             scaling = MinMaxScaler(feature_range=(-1,1)).fit(X)
-    #             X = scaling.transform(X)
-    #             X_left_out = scaling.transform(X_left_out)
+                # min-max normalization
+                scaling = MinMaxScaler(feature_range=(-1,1)).fit(X_rest)
+                X_rest = scaling.transform(X_rest)
+                X_left_out = scaling.transform(X_left_out)
                         
-    #             # impute missing values
-    #             imputer = SimpleImputer(strategy='mean')
-    #             imputer.fit(X)
-    #             X = imputer.transform(X)
-    #             X_left_out = imputer.transform(X_left_out)
+                # impute missing values
+                imputer = SimpleImputer(strategy='mean')
+                imputer.fit(X_rest)
+                X_rest = imputer.transform(X_rest)
+                X_left_out = imputer.transform(X_left_out)
 
-    #             # classification
-    #             clf_instance = clf(**clf_params)
-    #             clf_instance.fit(X, y)
-    #             y_pred_proba = clf_instance.predict_proba(X_left_out)
+                # classification
+                clf_instance = clf(**clf_params)
+                clf_instance.fit(X_rest, y_rest)
+                y_pred_proba = clf_instance.predict_proba(X_left_out)
                 
-    #             # record the prediction results
-    #             results = df_left_out_subj[['subj','sex','age','diagnosis','cn_label',f'age_{DISEASE}',f'time_to_{DISEASE}','clf_label','match_id']].copy()
-    #             results['feat_combo_name'] = feat_combo_name
-    #             results['clf_name'] = clf_name
-    #             results['y_pred_proba_0'] = y_pred_proba[:,0]
-    #             results['y_pred_proba_1'] = y_pred_proba[:,1]
-    #             prediction_results = pd.concat([prediction_results, results], ignore_index=True)
-    # prediction_results.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_results_{DISEASE}_{args.match_mode}.csv', index=False)    
+                # record the prediction results
+                results = df_left_out_subj[['subj','sex','age','diagnosis','cn_label',f'age_{DISEASE}',f'time_to_{DISEASE}','clf_label','match_id']].copy()
+                results['feat_combo_name'] = feat_combo_name
+                results['clf_name'] = clf_name
+                results['y_pred_proba_0'] = y_pred_proba[:,0]
+                results['y_pred_proba_1'] = y_pred_proba[:,1]
+                prediction_results = pd.concat([prediction_results, results], ignore_index=True)
+                
+    prediction_results.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_results_{DISEASE}_{args.match_mode}.csv', index=False)    
     prediction_results = pd.read_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_results_{DISEASE}_{args.match_mode}.csv')
-
+    
     # Sliding window
     window_size = 1
     window_step = 0.5
@@ -775,7 +777,7 @@ if __name__ == '__main__':
                 most_center_match_id = None
                 smallest_distance = window_size*0.5
                 for match_id in subj_rows['match_id'].unique():
-                    distance = abs(subj_rows.loc[subj_rows['match_id']==match_id, f'time_to_{DISEASE}'].values[0] - window_start + window_size*0.5)
+                    distance = abs(subj_rows.loc[subj_rows['match_id']==match_id, f'time_to_{DISEASE}'].values[0] - (window_start + window_end)*0.5)
                     if distance < smallest_distance:
                         smallest_distance = distance
                         most_center_match_id = match_id
@@ -787,36 +789,38 @@ if __name__ == '__main__':
         dict_windowed_results[idx] = w_results
         idx += 1
         
-    # # AUC Bootstrap
-    # num_bootstrap = 100  # number of bootstraps
-    # dict_aucs = {'idx': [], f'time_to_{DISEASE}': [], 'feat_combo_name': [] , 'clf_name': [], 
-    #              'auc_mean': [], 'auc_upper': [], 'auc_lower': []}
+    # AUC Bootstrap
+    num_bootstrap = 1000  # number of bootstraps
+    dict_aucs = {'idx': [], f'time_to_{DISEASE}': [], 'feat_combo_name': [] , 'clf_name': [], 
+                 'auc_mean': [], 'auc_upper': [], 'auc_lower': []}
 
-    # for idx, w_results in tqdm(dict_windowed_results.items(), desc='AUC Bootstrap'):
-    #     time_mean = w_results.loc[w_results['clf_label']==1, f'time_to_{DISEASE}'].mean()
+    for idx, w_results in tqdm(dict_windowed_results.items(), desc='AUC Bootstrap'):
+        time_mean = w_results.loc[w_results['clf_label']==1, f'time_to_{DISEASE}'].mean()
         
-    #     for feat_combo_name in w_results['feat_combo_name'].unique():
-    #         for clf_name in w_results['clf_name'].unique():
-    #             n_size = len(w_results['match_id'].unique())
-    #             aucs = []
-    #             for _ in range(num_bootstrap):
-    #                 bootstrapped_ids = np.random.choice(w_results['match_id'].unique(), n_size, replace=True)
-    #                 bootstrapped_df = w_results.loc[w_results['match_id'].isin(bootstrapped_ids), ]
-    #                 auc = roc_auc_score(bootstrapped_df['clf_label'], bootstrapped_df['y_pred_proba_1'])
-    #                 aucs.append(auc)
+        for feat_combo_name in w_results['feat_combo_name'].unique():
+            for clf_name in w_results['clf_name'].unique():
+                data = w_results.loc[(w_results['feat_combo_name']==feat_combo_name)&(w_results['clf_name']==clf_name), ].copy()
+                n_size = len(data['match_id'].unique())  # sample at pair-level
+                aucs = []
+                               
+                for _ in range(num_bootstrap):
+                    bootstrapped_ids = np.random.choice(data['match_id'].unique(), n_size, replace=True)
+                    bootstrapped_data = data.loc[data['match_id'].isin(bootstrapped_ids), ]
+                    auc = roc_auc_score(bootstrapped_data['clf_label'], bootstrapped_data['y_pred_proba_1'])
+                    aucs.append(auc)
                     
-    #             auc_mean = np.mean(aucs)
-    #             confidence_interval = np.percentile(aucs, [2.5, 97.5])  # 95% CI
+                auc_mean = np.mean(aucs)
+                confidence_interval = np.percentile(aucs, [2.5, 97.5])  # 95% CI
                 
-    #             dict_aucs['idx'].append(idx)
-    #             dict_aucs[f'time_to_{DISEASE}'].append(time_mean)
-    #             dict_aucs['feat_combo_name'].append(feat_combo_name)
-    #             dict_aucs['clf_name'].append(clf_name)
-    #             dict_aucs['auc_mean'].append(auc_mean)
-    #             dict_aucs['auc_upper'].append(confidence_interval[1])
-    #             dict_aucs['auc_lower'].append(confidence_interval[0])
+                dict_aucs['idx'].append(idx)
+                dict_aucs[f'time_to_{DISEASE}'].append(time_mean)
+                dict_aucs['feat_combo_name'].append(feat_combo_name)
+                dict_aucs['clf_name'].append(clf_name)
+                dict_aucs['auc_mean'].append(auc_mean)
+                dict_aucs['auc_upper'].append(confidence_interval[1])
+                dict_aucs['auc_lower'].append(confidence_interval[0])
                 
-    # df_aucs = pd.DataFrame(dict_aucs)
-    # df_aucs.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_auc_bootstrap_{DISEASE}_{args.match_mode}.csv', index=False)
+    df_aucs = pd.DataFrame(dict_aucs)
+    df_aucs.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_auc_bootstrap_{DISEASE}_{args.match_mode}.csv', index=False)
     df_aucs = pd.read_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_auc_bootstrap_{DISEASE}_{args.match_mode}.csv')
     visualize_t_minus_n_prediction_results(df_aucs, dict_windowed_results, png=f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_t_minus_n_prediction_results_{DISEASE}_{args.match_mode}.png')
