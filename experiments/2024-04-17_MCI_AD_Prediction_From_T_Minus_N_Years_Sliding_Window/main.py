@@ -1,9 +1,13 @@
 import pdb
 import random
+import textwrap
 import argparse
+import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
+import matplotlib.lines as mlines
 from tqdm import tqdm
 from pathlib import Path
 from warnings import simplefilter
@@ -56,6 +60,9 @@ def roster_feature_combinations(df):
     feat_combo['basic + WM age nonlinear + GM age (ours)'] = ['age', 'sex'] + [col for col in df.columns if '_wm_age_nonlinear' in col] + [col for col in df.columns if '_gm_age_ours' in col]
     feat_combo['basic + WM age nonlinear + GM age (TSAN)'] = ['age', 'sex'] + [col for col in df.columns if '_wm_age_nonlinear' in col] + [col for col in df.columns if '_gm_age_tsan' in col]
     feat_combo['basic + WM age nonlinear + GM age (DeepBrainNet)'] = ['age', 'sex'] + [col for col in df.columns if '_wm_age_nonlinear' in col] + [col for col in df.columns if '_gm_age_dbn' in col]
+
+    for feat_combo_name, feat_cols in feat_combo.items():
+        print(f'{feat_combo_name}:\n{feat_cols}\n')
     return feat_combo
 
 
@@ -91,7 +98,7 @@ class DataPreparation:
                 df_model = df_model.groupby(['dataset','subject','session','sex','age'])['age_pred'].mean().reset_index()
                 df_model = df_model.rename(columns={'age_pred': f'age_pred{col_suffix}'})
             else:
-                for fold_idx in tqdm([1,2,3,4,5], desc=f'Loading data for {model}'):
+                for fold_idx in [1,2,3,4,5]:
                     pred_csv = pred_root / f"predicted_age_fold-{fold_idx}_test{bc}.csv"
                     if fold_idx == 1:
                         df_model = pd.read_csv(pred_csv)
@@ -102,6 +109,7 @@ class DataPreparation:
                         tmp = tmp.groupby(['dataset','subject','session','sex','age'])['age_pred'].mean().reset_index()
                         tmp = tmp.rename(columns={'age_pred': f'age_pred{col_suffix}_{fold_idx}'})
                         df_model = df_model.merge(tmp, on=['dataset','subject','session','sex','age'])
+            print(f'Loaded data for {model}, shape: {df_model.shape}')
             
             if i == 0:
                 df = df_model.copy()
@@ -111,7 +119,7 @@ class DataPreparation:
         # remove duplicated rows (e.g., ses-270scanner09, ses-270scanner10 in BLSA)
         df = df.sort_values(by=['dataset', 'subject', 'age', 'session'], ignore_index=True)
         df = df.drop_duplicates(subset=['dataset', 'subject', 'age'], keep='last', ignore_index=True)
-        print(f"Predictions loaded. DataFrame shape: {df.shape}")
+        print(f"--------> Predictions loaded. DataFrame shape: {df.shape}")
         return df
     
     def retrieve_diagnosis_label(self, df):
@@ -128,9 +136,11 @@ class DataPreparation:
                 df.loc[i,'diagnosis'] = self.databank.loc[loc_filter, 'diagnosis_simple'].values[0]
         
         df['diagnosis'] = df['diagnosis'].replace('dementia', 'AD')
+        print(f"--------> Diagnosis labels retrieved. {len(df.loc[df['diagnosis'].isna(),].index)} out of {len(df.index)} do not have diagnosis info.")
         return df
     
     def assign_cn_label(self, df):
+        # TODO: add new column "age_last_cn" and "time_to_last_cn" for more rigorous matching
         """ Create a new column "cn_label" to indicate whether the subject is cognitively normal.
         1:   the subject is cognitively normal, 
              and has only cognitively normal in his/her diagnosis history, 
@@ -151,7 +161,7 @@ class DataPreparation:
                     df.loc[(df['subj']==subj) & (df['age']!=df.loc[df['subj']==subj,'age'].max()), 'cn_label'] = 1
         num_subj_strict = len(df.loc[df['cn_label']==1, 'subj'].unique())
         num_subj_loose = len(df.loc[df['cn_label']>=0.5, 'subj'].unique())
-        print(f'Found {num_subj_strict} subjects with strict CN label, and {num_subj_loose} subjects with loose CN label.')
+        print(f'--------> Found {num_subj_strict} subjects with strict CN label, and {num_subj_loose} subjects with loose CN label.')
         return df
     
     def feature_engineering(self, df):
@@ -260,68 +270,9 @@ class DataPreparation:
             df[f'time_to_{disease}'] = df[f'age_{disease}'] - df['age']
             
             num_subj = len(df.loc[df[f'age_{disease}'].notna(), 'subj'].unique())
-            print(f'Found {num_subj} subjects with {disease} progression.')
+            print(f'--------> Found {num_subj} subjects with {disease} progression.')
         
         return df
-
-    def visualize_data_points(self, df, png, disease='MCI', df_matched=None, markout_matched_dp=False):
-        """ Visualize the chronological age, and time to AD/MCI of the data points 
-        of subjects who have progressed from cognitively normal to MCI or AD.
-            If markout_matched_dp is True, the data points which have been matched with CN data points
-        will be marked out with a vertical line.
-        """
-        df = df.loc[df[f'age_{disease}'].notna(), ].copy()
-        if 'subj' not in df.columns:
-            df['subj'] = df['dataset'] + '_' + df['subject']
-            
-        df = df.sort_values(by='age')
-        df['y_subject'] = None
-        for i, subj in enumerate(df['subj'].unique()):
-            df.loc[df['subj']==subj, 'y_subject'] = i
-        
-        if markout_matched_dp:
-            df_matched = df_matched.loc[df_matched[f'time_to_{disease}'].notna(), ].copy()
-            df_matched['y_subject'] = None
-            for subj in df_matched['subj'].unique():
-                df_matched.loc[df_matched['subj']==subj, 'y_subject'] = df.loc[df['subj']==subj, 'y_subject'].values[0]
-
-        fig, axes = plt.subplots(1, 2, figsize=(12, 12))
-        
-        for ax_id, x_axis in enumerate(['age', f'time_to_{disease}']):            
-            sns.lineplot(
-                data=df,
-                x=x_axis, y='y_subject',
-                units="subj",
-                estimator=None, 
-                lw=1,
-                color = 'tab:gray',
-                alpha=0.5,
-                linestyle='-',
-                ax=axes[ax_id]
-                )
-
-            sns.scatterplot(
-                data=df, 
-                x=x_axis, y='y_subject', 
-                hue='diagnosis', 
-                palette=['tab:green', 'tab:orange', 'tab:red'],
-                alpha=1,
-                ax=axes[ax_id]
-                )
-            
-            if markout_matched_dp:
-                axes[ax_id].scatter(
-                    df_matched[x_axis], df_matched['y_subject'],
-                    c='k',
-                    marker='|',
-                    label='with matched CN data point'
-                )
-                axes[ax_id].legend()
-
-            axes[ax_id].set_xlabel(f'{x_axis} (years)', fontsize=16, fontfamily='DejaVu Sans')
-            axes[ax_id].set_ylabel('Subject', fontsize=16, fontfamily='DejaVu Sans')  
-        axes[1].invert_xaxis()
-        fig.savefig(png, dpi=300)
         
     def get_matched_cn_data(self, df_master, df_subset, age_diff_threshold=1, mode='hungry'):
         """ Use greedy algorithm to sample a subset of cognitively normal data points from the main dataframe df_master.
@@ -489,6 +440,111 @@ class DataPreparation:
             
         return df_subset_matched
 
+    def visualize_data_points(self, df, df_matched, png, disease='MCI', markout_matched_dp=True):
+        """ Visualize i) the chronological age of longitudinal data points of CN subject, 
+        ii) the chronological age and iii) time to AD/MCI of longitudinal data points of subjects 
+        who have progressed from cognitively normal to MCI or AD.
+            If markout_matched_dp is True, the data points that are matched with the CN data points will be marked out.
+        """
+        fig, axes = plt.subplots(1, 3, figsize=(18, 12))
+        
+        # subplot-1: chronological age of CN subjects
+        data = df.loc[df['cn_label']>=0.5, ].copy()
+        data = data.sort_values(by='age')
+        data['y_subject'] = None
+        for i, subj in enumerate(data['subj'].unique()):
+            data.loc[data['subj']==subj, 'y_subject'] = i
+        sns.lineplot(
+            data=data, x='age', y='y_subject', units='subj', estimator=None, 
+            lw=1, color='tab:gray', alpha=0.5, linestyle='-', ax=axes[0]
+        )
+        
+        cn_groups = {
+            0.5: {'name': 'CN (without follow-up sessions)', 'color': 'greenyellow'},
+            1: {'name': 'CN (with ≥1 follow-up CN session)', 'color': 'tab:green'},
+        }
+        for cn_label, group_props in cn_groups.items():
+            axes[0].scatter(
+                x=data.loc[data['cn_label']==cn_label, 'age'], y=data.loc[data['cn_label']==cn_label, 'y_subject'],
+                s=5, c=group_props['color'], label=group_props['name']
+            )
+        axes[0].legend(loc='upper left')
+        axes[0].set_ylabel(f'CN subjects (N={len(data["subj"].unique())}, sorted by baseline age)')
+        axes[0].set_xlabel('chronological age (years)')
+
+        # subplot-2: chronological age of subjects who progressed to MCI/AD (with/without matched CN data points)
+        data = df.copy()
+        data = data.sort_values(by='age')
+        data['y_subject'] = None
+        for i, subj in enumerate(data.loc[data[f'time_to_{disease}'].notna(), 'subj'].unique()):
+            if markout_matched_dp:
+                match_ids = df_matched.loc[df_matched['subj']==subj, 'match_id'].unique()
+                for _, row in df_matched.loc[df_matched['match_id'].isin(match_ids), ].iterrows():
+                    data.loc[(data['subj']==row['subj'])&(data['age']==row['age']), 'y_subject'] = i + 0.3
+            data.loc[data['subj']==subj, 'y_subject'] = i
+        data = data.loc[data['y_subject'].notna(), ].copy()
+
+        sns.lineplot(
+            data=data, x='age', y='y_subject', units='subj', estimator=None,
+            lw=1, color='tab:gray', alpha=0.5, linestyle='-', ax=axes[1]
+        )
+        progression_phases = {
+            'normal': {'name': 'CN (at present)', 'color': 'yellow'},
+            'MCI': {'name': 'MCI', 'color': 'tab:orange'},
+            'AD': {'name': 'AD', 'color': 'tab:red'},
+        }
+        for phase, props in progression_phases.items():
+            axes[1].scatter(
+                x=data.loc[data[f'time_to_{disease}'].notna()&(data['diagnosis']==phase), 'age'], 
+                y=data.loc[data[f'time_to_{disease}'].notna()&(data['diagnosis']==phase), 'y_subject'],
+                s=12, marker='^', c=props['color'], label=props['name']
+            )
+        axes[1].legend(loc='upper left')
+        
+        for cn_label, group_props in cn_groups.items():
+            axes[1].scatter(
+                x=data.loc[data['cn_label']==cn_label, 'age'], y=data.loc[data['cn_label']==cn_label, 'y_subject'],
+                s=5, c=group_props['color'], label=group_props['name']
+            )
+        axes[1].set_ylabel(f'Subjects who progressed to {disease} from CN (N={len(data.loc[data[f"age_{disease}"].notna(), "subj"].unique())})')
+        axes[1].set_xlabel('chronological age (years)')
+
+        # subplot-3: time to MCI/AD of subjects who progressed to MCI/AD
+        data = df.copy()
+        data = data.sort_values(by='age')
+        data['y_subject'] = None
+        data_matched = df_matched.copy()
+        data_matched['y_subject'] = None
+        for i, subj in enumerate(data.loc[data[f'time_to_{disease}'].notna(), 'subj'].unique()):
+            if markout_matched_dp:
+                data_matched.loc[data_matched['subj']==subj, 'y_subject'] = i
+            data.loc[data['subj']==subj, 'y_subject'] = i
+        data = data.loc[data['y_subject'].notna(), ].copy()
+        data_matched = data_matched.loc[data_matched['y_subject'].notna(), ].copy()
+        
+        sns.lineplot(
+            data=data, x=f'time_to_{disease}', y='y_subject', units='subj', estimator=None,
+            lw=1, color='tab:gray', alpha=0.5, linestyle='-', ax=axes[2]
+        )
+        for phase, props in progression_phases.items():
+            axes[2].scatter(
+                x=data.loc[data[f'time_to_{disease}'].notna()&(data['diagnosis']==phase), f'time_to_{disease}'], 
+                y=data.loc[data[f'time_to_{disease}'].notna()&(data['diagnosis']==phase), 'y_subject'],
+                s=12, marker='^', c=props['color']
+            )
+        if markout_matched_dp:
+            axes[2].scatter(
+                x=data_matched.loc[data_matched[f'time_to_{disease}'].notna(), f'time_to_{disease}'], 
+                y=data_matched.loc[data_matched[f'time_to_{disease}'].notna(), 'y_subject'],
+                s=16, marker='|', c='k', label='with matched CN data points'
+            )
+            axes[2].legend(loc='upper left')
+            
+        axes[2].set_xlabel(f'Time to {disease} (years)')
+        axes[2].set_ylabel(f'Subjects who progressed to {disease} from CN (N={len(data.loc[data[f"age_{disease}"].notna(), "subj"].unique())})')
+        axes[2].invert_xaxis()
+        fig.savefig(png, dpi=300)
+
 
 class LeaveOneSubjectOutDataLoader:
     """ Leave-one-subject-out data loader. 
@@ -518,7 +574,102 @@ class LeaveOneSubjectOutDataLoader:
         else:
             raise StopIteration
 
+def visualize_t_minus_n_prediction_results(df_aucs, dict_windowed_results, png):
+    # hyperparameters
+    fontsize = 9
+    fontfamily = 'DejaVu Sans'
+    linewidth = 1.5
+    fig = plt.figure(figsize=(6.5, 8), tight_layout=True)
+    gs = gridspec.GridSpec(nrows=4, ncols=3, wspace=0, hspace=0, width_ratios=[0.75, 0.25, 1],  height_ratios=[1, 1, 1, 1])
+    clf_names = ['Logistic Regression','Linear SVM','Random Forest']
+    
+    dict_feat_combos = {
+        'basic: chronological age + sex': {'color': 'tab:gray', 'alpha': 0.4},
+        'basic + WM age nonlinear': {'color': 'tab:blue', 'alpha': 0.8},
+        'basic + GM age (ours)': {'color': 'tab:red', 'alpha': 0.8},
+        'basic + GM age (TSAN)': {'color': 'darkred', 'alpha': 0.4},
+        'basic + GM age (DeepBrainNet)': {'color': 'indianred', 'alpha': 0.4},
+        'basic + WM age affine': {'color': 'tab:purple', 'alpha': 0.4},
+        'basic + WM age nonlinear + GM age (ours)': {'color': 'tab:orange', 'alpha': 0.8},
+        'basic + WM age nonlinear + GM age (TSAN)': {'color': 'wheat', 'alpha': 0.4},
+        'basic + WM age nonlinear + GM age (DeepBrainNet)': {'color': 'gold', 'alpha': 0.4},
+    }
 
+    timetoevent_col = [col for col in df_aucs.columns if 'time_to_' in col]
+    assert len(timetoevent_col) == 1
+    timetoevent_col = timetoevent_col[0]
+    
+    xlim= [-0.25, df_aucs[timetoevent_col].max()+0.25]
+    
+    # Upper left block: draw the legend
+    ax = fig.add_subplot(gs[:3,0])
+    lines = []
+    for feat_combo in dict_feat_combos.keys():
+        label_txt = textwrap.fill(feat_combo, width=25)
+        line = mlines.Line2D([], [], color=dict_feat_combos[feat_combo]['color'], alpha=dict_feat_combos[feat_combo]['alpha'], linewidth=linewidth, label=label_txt)
+        lines.append(line)
+    ax.legend(handles=lines, 
+              prop={'size':fontsize, 'family':fontfamily}, 
+              labelspacing=2.5, 
+              frameon=True, 
+              loc='upper left', 
+              bbox_to_anchor=(0, 1), 
+              title='Feature Combination',
+              title_fontproperties={'size':fontsize, 'family':fontfamily, 'weight':'bold'})
+    ax.axis('off')
+    
+    # Upper middle block: y axis label
+    ax = fig.add_subplot(gs[:3,1])
+    ax.text(0.2, 0.5, 'Area under the ROC Curve', fontsize=fontsize, fontfamily=fontfamily, ha='center', va='center', rotation='vertical', transform=ax.transAxes)
+    ax.axis('off')
+    
+    # Upper right block: draw the AUC plots
+    for i, classifier in enumerate(clf_names):
+        ax = fig.add_subplot(gs[i,2])
+        for feat_combo in dict_feat_combos.keys():
+            data = df_aucs.loc[(df_aucs['clf_name']==classifier)&(df_aucs['feat_combo_name']==feat_combo), ].copy()
+            ax.plot(
+                data[timetoevent_col].values,
+                data['auc_mean'].values,
+                linewidth=linewidth,
+                color=dict_feat_combos[feat_combo]['color'],
+                alpha=dict_feat_combos[feat_combo]['alpha'],
+                )
+            ax.fill_between(
+                x=data[timetoevent_col].values,
+                y1=data['auc_upper'].values,
+                y2=data['auc_lower'].values,
+                color=dict_feat_combos[feat_combo]['color'],
+                alpha=dict_feat_combos[feat_combo]['alpha']*0.5,
+                linewidth=0)
+        ax.vlines(x=df_aucs[timetoevent_col].unique(), ymin=0, ymax=1, transform=ax.get_xaxis_transform(), color='black', linestyle='--', linewidth=linewidth, alpha=0.2)
+        ax.text(0.02, 0.95, classifier, fontsize=fontsize, fontfamily=fontfamily, transform=ax.transAxes, verticalalignment='top')
+        ax.set_xlim(left=xlim[0], right=xlim[1])
+        ax.invert_xaxis()
+        ax.set_ylabel('')
+
+    # Bottom left:
+    # Bottom right: draw time-to-event distribution raincloud plot
+    data_subsets = {'idx': [], timetoevent_col: []}
+    for idx, w_results in dict_windowed_results.items():
+        w_results = w_results.loc[w_results[timetoevent_col]>=0, ].copy()
+        data_subsets['idx'] += [idx]*len(w_results.index)
+        data_subsets[timetoevent_col] += w_results[timetoevent_col].values.tolist()
+    
+    ax = fig.add_subplot(gs[3,2])
+    sns.violinplot(data=data_subsets, x=timetoevent_col, y='idx', orient='h', split=True, inner=None, ax=ax)
+    ax.vlines(x=df_aucs[timetoevent_col].unique(), ymin=0, ymax=1, transform=ax.get_xaxis_transform(), color='black', linestyle='--', linewidth=linewidth, alpha=0.2)
+    ax.set_xlim(left=xlim[0], right=xlim[1])
+    ax.invert_xaxis()
+    ax.set_yticks([])
+    ax.set_ylabel(f'subsets from sliding windows', fontsize=fontsize, fontfamily=fontfamily)
+    
+    ax.set_xlabel(f"{timetoevent_col.replace('time_to_', 'Time to ')} (years)", fontsize=fontsize, fontfamily=fontfamily)
+    Path(png).parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(png, dpi=600)
+    
+    
+    
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='"T-0,T-1,...,T-N" MCI/AD prediction experiment')
     parser.add_argument('--wobc', action='store_true', help='when this flag is given, load predictions that are not bias-corrected')
@@ -537,9 +688,8 @@ if __name__ == '__main__':
     df = data_prep.load_predictions_of_all_models(bias_correction=BIAS_CORRECTION)
     df = data_prep.retrieve_diagnosis_label(df)
     df = data_prep.assign_cn_label(df)
-    df = data_prep.feature_engineering(df)
+    df = data_prep.feature_engineering(df)    
     df = data_prep.mark_progression_subjects_out(df)
-    data_prep.visualize_data_points(df, f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_progression_data_points_{DISEASE}.png', disease=DISEASE)
     df.to_csv('experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/data_prep.csv', index=False)
     df = pd.read_csv('experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/data_prep.csv')
 
@@ -548,49 +698,125 @@ if __name__ == '__main__':
     df_interest_matched = data_prep.get_matched_cn_data(df_master=df, df_subset=df_interest, age_diff_threshold=1, mode=args.match_mode)
     df_interest_matched.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/matched_dataset_{DISEASE}_{args.match_mode}.csv', index=False)
     df_interest_matched = pd.read_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/matched_dataset_{DISEASE}_{args.match_mode}.csv')
-    data_prep.visualize_data_points(df, f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_progression_data_points_{DISEASE}_matched_with_{args.match_mode}.png', disease=DISEASE, df_matched=df_interest_matched, markout_matched_dp=True)
-    
-    # Leave-one-subject-out prediction for each classifier-feature pair
-    classifiers = roster_classifiers()
-    feat_combo = roster_feature_combinations(df)
-    prediction_results = pd.DataFrame()
+    data_prep.visualize_data_points(df, df_interest_matched, png=f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_progression_data_points_{DISEASE}_matched_with_{args.match_mode}.png', disease='MCI', markout_matched_dp=True)
+    # # Leave-one-subject-out prediction for each classifier-feature pair
+    # classifiers = roster_classifiers()
+    # feat_combo = roster_feature_combinations(df)
+    # prediction_results = pd.DataFrame()
 
-    for df_left_out_subj, df_rest in tqdm(LeaveOneSubjectOutDataLoader(df_interest_matched, DISEASE), desc='Leave-one-subject-out prediction'):
-        for feat_combo_name, feat_cols in feat_combo.items():
-            for clf_name, (clf, clf_params) in classifiers.items():
-                X = df_rest[feat_cols].values
-                y = df_rest['clf_label'].values
-                X_left_out = df_left_out_subj[feat_cols].values
-                y_left_out = df_left_out_subj['clf_label'].values
+    # for df_left_out_subj, df_rest in tqdm(LeaveOneSubjectOutDataLoader(df_interest_matched, DISEASE), desc='Leave-one-subject-out prediction'):
+    #     for feat_combo_name, feat_cols in feat_combo.items():
+    #         for clf_name, (clf, clf_params) in classifiers.items():
+    #             X = df_rest[feat_cols].values
+    #             y = df_rest['clf_label'].values
+    #             X_left_out = df_left_out_subj[feat_cols].values
+    #             y_left_out = df_left_out_subj['clf_label'].values
                 
-                # min-max normalization
-                scaling = MinMaxScaler(feature_range=(-1,1)).fit(X)
-                X = scaling.transform(X)
-                X_left_out = scaling.transform(X_left_out)
+    #             # min-max normalization
+    #             scaling = MinMaxScaler(feature_range=(-1,1)).fit(X)
+    #             X = scaling.transform(X)
+    #             X_left_out = scaling.transform(X_left_out)
                         
-                # impute missing values
-                imputer = SimpleImputer(strategy='mean')
-                imputer.fit(X)
-                X = imputer.transform(X)
-                X_left_out = imputer.transform(X_left_out)
+    #             # impute missing values
+    #             imputer = SimpleImputer(strategy='mean')
+    #             imputer.fit(X)
+    #             X = imputer.transform(X)
+    #             X_left_out = imputer.transform(X_left_out)
 
-                # classification
-                clf_instance = clf(**clf_params)
-                clf_instance.fit(X, y)
-                y_pred_proba = clf_instance.predict_proba(X_left_out)
+    #             # classification
+    #             clf_instance = clf(**clf_params)
+    #             clf_instance.fit(X, y)
+    #             y_pred_proba = clf_instance.predict_proba(X_left_out)
                 
-                # record the prediction results
-                results = df_left_out_subj[['subj','sex','age','diagnosis','cn_label',f'age_{DISEASE}',f'time_to_{DISEASE}','clf_label','match_id']].copy()
-                results['feat_combo_name'] = feat_combo_name
-                results['clf_name'] = clf_name
-                results['y_pred_proba_0'] = y_pred_proba[:,0]
-                results['y_pred_proba_1'] = y_pred_proba[:,1]
-                prediction_results = pd.concat([prediction_results, results], ignore_index=True)
-    prediction_results.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_results_{DISEASE}_{args.match_mode}.csv', index=False)
-    
-    # # Sliding window and AUC bootstrap
-    # window_size = 1
-    # window_step = 0.5
+    #             # record the prediction results
+    #             results = df_left_out_subj[['subj','sex','age','diagnosis','cn_label',f'age_{DISEASE}',f'time_to_{DISEASE}','clf_label','match_id']].copy()
+    #             results['feat_combo_name'] = feat_combo_name
+    #             results['clf_name'] = clf_name
+    #             results['y_pred_proba_0'] = y_pred_proba[:,0]
+    #             results['y_pred_proba_1'] = y_pred_proba[:,1]
+    #             prediction_results = pd.concat([prediction_results, results], ignore_index=True)
+    # prediction_results.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_results_{DISEASE}_{args.match_mode}.csv', index=False)    
+    prediction_results = pd.read_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_results_{DISEASE}_{args.match_mode}.csv')
 
-    # dict_windowed_results = {0: prediction_results.loc[prediction_results[f'time_to_{DISEASE}']==0, ].copy()}
+    # Sliding window
+    window_size = 1
+    window_step = 0.5
+    num_window = int((prediction_results[f'time_to_{DISEASE}'].max() - window_size) / window_step) + 1
+    dict_windowed_results = {}
+
+    # T-0
+    w_results = pd.DataFrame()
+    for subj in prediction_results.loc[prediction_results[f'time_to_{DISEASE}']==0, 'subj'].unique():
+        subj_rows = prediction_results.loc[(prediction_results['subj']==subj)&(prediction_results[f'time_to_{DISEASE}']==0), ]
+        assert subj_rows['match_id'].nunique() == 1, f"Multiple data points found for {subj} at T-0."
+        match_id = subj_rows['match_id'].unique()[0]
+        w_results = pd.concat([w_results, prediction_results.loc[prediction_results['match_id']==match_id, ]])
+    dict_windowed_results[0] = w_results
     
+    # T-n
+    idx = 1
+    for i in range(num_window+1):
+        window_start = i * window_step
+        window_end = window_start + window_size
+        
+        # if no one is in the window, skip
+        subjs = prediction_results.loc[(prediction_results[f'time_to_{DISEASE}']>window_start)&(prediction_results[f'time_to_{DISEASE}']<=window_end), 'subj'].unique()
+        if len(subjs) < 3:
+            print(f'Fewer than 3 subjects found in the window [{window_start}, {window_end}].')
+            continue
+        
+        w_results = pd.DataFrame()
+        for subj in subjs:
+            subj_rows = prediction_results.loc[(prediction_results['subj']==subj)&(prediction_results[f'time_to_{DISEASE}']>window_start)&(prediction_results[f'time_to_{DISEASE}']<=window_end), ]
+            
+            if len(subj_rows['match_id'].unique()) == 1:
+                match_id = subj_rows['match_id'].unique()[0]
+            elif len(subj_rows['match_id'].unique()) > 1:
+                most_center_match_id = None
+                smallest_distance = window_size*0.5
+                for match_id in subj_rows['match_id'].unique():
+                    distance = abs(subj_rows.loc[subj_rows['match_id']==match_id, f'time_to_{DISEASE}'].values[0] - window_start + window_size*0.5)
+                    if distance < smallest_distance:
+                        smallest_distance = distance
+                        most_center_match_id = match_id
+                match_id = most_center_match_id
+            else:
+                raise ValueError(f'No match found for {subj} in the window [{window_start}, {window_end}].')
+           
+            w_results = pd.concat([w_results, prediction_results.loc[prediction_results['match_id']==match_id, ]])
+        dict_windowed_results[idx] = w_results
+        idx += 1
+        
+    # # AUC Bootstrap
+    # num_bootstrap = 100  # number of bootstraps
+    # dict_aucs = {'idx': [], f'time_to_{DISEASE}': [], 'feat_combo_name': [] , 'clf_name': [], 
+    #              'auc_mean': [], 'auc_upper': [], 'auc_lower': []}
+
+    # for idx, w_results in tqdm(dict_windowed_results.items(), desc='AUC Bootstrap'):
+    #     time_mean = w_results.loc[w_results['clf_label']==1, f'time_to_{DISEASE}'].mean()
+        
+    #     for feat_combo_name in w_results['feat_combo_name'].unique():
+    #         for clf_name in w_results['clf_name'].unique():
+    #             n_size = len(w_results['match_id'].unique())
+    #             aucs = []
+    #             for _ in range(num_bootstrap):
+    #                 bootstrapped_ids = np.random.choice(w_results['match_id'].unique(), n_size, replace=True)
+    #                 bootstrapped_df = w_results.loc[w_results['match_id'].isin(bootstrapped_ids), ]
+    #                 auc = roc_auc_score(bootstrapped_df['clf_label'], bootstrapped_df['y_pred_proba_1'])
+    #                 aucs.append(auc)
+                    
+    #             auc_mean = np.mean(aucs)
+    #             confidence_interval = np.percentile(aucs, [2.5, 97.5])  # 95% CI
+                
+    #             dict_aucs['idx'].append(idx)
+    #             dict_aucs[f'time_to_{DISEASE}'].append(time_mean)
+    #             dict_aucs['feat_combo_name'].append(feat_combo_name)
+    #             dict_aucs['clf_name'].append(clf_name)
+    #             dict_aucs['auc_mean'].append(auc_mean)
+    #             dict_aucs['auc_upper'].append(confidence_interval[1])
+    #             dict_aucs['auc_lower'].append(confidence_interval[0])
+                
+    # df_aucs = pd.DataFrame(dict_aucs)
+    # df_aucs.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_auc_bootstrap_{DISEASE}_{args.match_mode}.csv', index=False)
+    df_aucs = pd.read_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_auc_bootstrap_{DISEASE}_{args.match_mode}.csv')
+    visualize_t_minus_n_prediction_results(df_aucs, dict_windowed_results, png=f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_t_minus_n_prediction_results_{DISEASE}_{args.match_mode}.png')
