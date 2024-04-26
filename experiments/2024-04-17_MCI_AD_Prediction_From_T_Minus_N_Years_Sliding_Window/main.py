@@ -679,35 +679,41 @@ def visualize_t_minus_n_prediction_results(df_aucs, dict_windowed_results, png):
         ax.set_ylabel('')
 
     # Bottom left:
+    # Bottom middle block: y axis label
+    ax = fig.add_subplot(gs[3,1])
+    ax.text(0.2, 0.5, f'subsets from sliding windows', fontsize=fontsize, fontfamily=fontfamily, ha='center', va='center', rotation='vertical', transform=ax.transAxes)
+    ax.axis('off')
+    
     # Bottom right: draw time-to-event distribution raincloud plot
-    data_subsets = {'idx': [], timetoevent_col: []}
+    data_subsets = {'idx': [], timetoevent_col: [], 'num_pairs': []}
     for idx, w_results in dict_windowed_results.items():
         w_results = w_results.loc[w_results[timetoevent_col]>=0, ].copy()
         data_subsets['idx'] += [idx]*len(w_results.index)
         data_subsets[timetoevent_col] += w_results[timetoevent_col].values.tolist()
+        data_subsets['num_pairs'] += [w_results['match_id'].nunique()] * len(w_results.index)
+    data_subsets = pd.DataFrame(data_subsets)
     
     ax = fig.add_subplot(gs[3,2])
-    sns.violinplot(data=data_subsets, x=timetoevent_col, y='idx', orient='h', split=True, inner=None, cut=0, density_norm='count', ax=ax)
+    sns.violinplot(data=data_subsets, x=timetoevent_col, y='idx', orient='h', color='dimgray', width=2, linewidth=1, split=True, inner=None, cut=0, density_norm='count', ax=ax)
     ax.vlines(x=df_aucs[timetoevent_col].unique(), ymin=0, ymax=1, transform=ax.get_xaxis_transform(), color='black', linestyle='--', linewidth=linewidth, alpha=0.2)
+    for idx in data_subsets['idx'].unique(): # annotate the number of MCI/AD data points in each subset
+        num = data_subsets.loc[data_subsets['idx']==idx, 'num_pairs'].values[0]
+        ax.text(data_subsets.loc[data_subsets['idx']==idx, timetoevent_col].mean(), idx+1.5, f'{num}', fontsize=fontsize*0.5, fontfamily=fontfamily, va='center')
     ax.set_xlim(left=xlim[0], right=xlim[1])
     ax.invert_xaxis()
     ax.set_yticks([])
-    ax.set_ylabel(f'subsets from sliding windows', fontsize=fontsize, fontfamily=fontfamily)
-    
+    ax.set_ylabel('')
     ax.set_xlabel(f"{timetoevent_col.replace('time_to_', 'Time to ')} (years)", fontsize=fontsize, fontfamily=fontfamily)
+    
     Path(png).parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(png, dpi=600)
-    
+    plt.close('all')
     
 def user_input():
     parser = argparse.ArgumentParser(description='"T-0,T-1,...,T-N" MCI/AD prediction experiment')
     parser.add_argument('--wobc', action='store_true', help='when this flag is given, load predictions that are not bias-corrected')
     parser.add_argument('--disease', type=str, default='MCI', help='either "MCI" or "AD"')
-    parser.add_argument('--match_mode', type=str, default='hungry', help=(
-        'either "hungry", "allow_multiple_per_subject", or "lavish". ' 
-        '"hungry" uses the most greedy approach and thus will result in the most matched data points. '
-        '"allow_multiple_per_subject" allows multiple data points from the same subject to be used for matching. '
-        '"lavish" will use only one data point from each subject.'))
+    parser.add_argument('--match_mode', type=str, default='hungry', help='either "hungry_but_picky", "hungry", "allow_multiple_per_subject", or "lavish".')
     parser.add_argument('--run_all_exp', action='store_true', help='when this flag is given, run through all combinations of user inputs.')
     args = parser.parse_args()
 
@@ -846,40 +852,44 @@ def run_experiment(bias_correction, disease, match_mode):
         idx += 1
         
     # AUC Bootstrap
-    num_bootstrap = 1000  # number of bootstraps
-    dict_aucs = {
-        'idx': [], f'time_to_{disease}': [], 'feat_combo_name': [] , 'clf_name': [], 
-        'auc_mean': [], 'auc_upper': [], 'auc_lower': []
-        }
+    output_csv = f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_auc_bootstrap{suffix}.csv'
+    if Path(output_csv).is_file():
+        df_aucs = pd.read_csv(output_csv)
+    else:
+        num_bootstrap = 1000  # number of bootstraps
+        dict_aucs = {
+            'idx': [], f'time_to_{disease}': [], 'feat_combo_name': [] , 'clf_name': [], 
+            'auc_mean': [], 'auc_upper': [], 'auc_lower': []
+            }
 
-    for idx, w_results in tqdm(dict_windowed_results.items(), desc='AUC Bootstrap'):
-        time_mean = w_results.loc[w_results['clf_label']==1, f'time_to_{disease}'].mean()
-        
-        for feat_combo_name in w_results['feat_combo_name'].unique():
-            for clf_name in w_results['clf_name'].unique():
-                data = w_results.loc[(w_results['feat_combo_name']==feat_combo_name)&(w_results['clf_name']==clf_name), ].copy()
-                n_size = len(data['match_id'].unique())  # sample at pair-level
-                aucs = []
-                               
-                for _ in range(num_bootstrap):
-                    bootstrapped_ids = np.random.choice(data['match_id'].unique(), n_size, replace=True)
-                    bootstrapped_data = data.loc[data['match_id'].isin(bootstrapped_ids), ]
-                    auc = roc_auc_score(bootstrapped_data['clf_label'], bootstrapped_data['y_pred_proba_1'])
-                    aucs.append(auc)
+        for idx, w_results in tqdm(dict_windowed_results.items(), desc='AUC Bootstrap'):
+            time_mean = w_results.loc[w_results['clf_label']==1, f'time_to_{disease}'].mean()
+            
+            for feat_combo_name in w_results['feat_combo_name'].unique():
+                for clf_name in w_results['clf_name'].unique():
+                    data = w_results.loc[(w_results['feat_combo_name']==feat_combo_name)&(w_results['clf_name']==clf_name), ].copy()
+                    n_size = len(data['match_id'].unique())  # sample at pair-level
+                    aucs = []
+                                
+                    for _ in range(num_bootstrap):
+                        bootstrapped_ids = np.random.choice(data['match_id'].unique(), n_size, replace=True)
+                        bootstrapped_data = data.loc[data['match_id'].isin(bootstrapped_ids), ]
+                        auc = roc_auc_score(bootstrapped_data['clf_label'], bootstrapped_data['y_pred_proba_1'])
+                        aucs.append(auc)
+                        
+                    auc_mean = np.mean(aucs)
+                    confidence_interval = np.percentile(aucs, [2.5, 97.5])  # 95% CI
                     
-                auc_mean = np.mean(aucs)
-                confidence_interval = np.percentile(aucs, [2.5, 97.5])  # 95% CI
-                
-                dict_aucs['idx'].append(idx)
-                dict_aucs[f'time_to_{disease}'].append(time_mean)
-                dict_aucs['feat_combo_name'].append(feat_combo_name)
-                dict_aucs['clf_name'].append(clf_name)
-                dict_aucs['auc_mean'].append(auc_mean)
-                dict_aucs['auc_upper'].append(confidence_interval[1])
-                dict_aucs['auc_lower'].append(confidence_interval[0])
-                
-    df_aucs = pd.DataFrame(dict_aucs)
-    df_aucs.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_auc_bootstrap{suffix}.csv', index=False)
+                    dict_aucs['idx'].append(idx)
+                    dict_aucs[f'time_to_{disease}'].append(time_mean)
+                    dict_aucs['feat_combo_name'].append(feat_combo_name)
+                    dict_aucs['clf_name'].append(clf_name)
+                    dict_aucs['auc_mean'].append(auc_mean)
+                    dict_aucs['auc_upper'].append(confidence_interval[1])
+                    dict_aucs['auc_lower'].append(confidence_interval[0])
+                    
+        df_aucs = pd.DataFrame(dict_aucs)
+        df_aucs.to_csv(output_csv, index=False)
     visualize_t_minus_n_prediction_results(df_aucs, dict_windowed_results, png=f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_t_minus_n_prediction_results{suffix}.png')
 
 if __name__ == '__main__':
