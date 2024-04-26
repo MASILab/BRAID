@@ -140,25 +140,28 @@ class DataPreparation:
         return df
     
     def assign_cn_label(self, df):
-        # TODO: add new column "age_last_cn" and "time_to_last_cn" for more rigorous matching
-        """ Create a new column "cn_label" to indicate whether the subject is cognitively normal.
-        1:   the subject is cognitively normal, 
-             and has only cognitively normal in his/her diagnosis history, 
-             and has at least one following session in which the subject is still cognitively normal.
-        0.5: the subject is cognitively normal,
-             and has only cognitively normal in his/her diagnosis history.
+        """ Create the following new columns:
+        "cn_label": 0.5 for cognitively normal, and has only cognitively normal in his/her diagnosis history.
+            1 for all above, plus has at least one following session in which the subject is still cognitively normal.
+        "age_last_cn": the age of the last available session of the subject (cn_label >= 0.5).
+        "time_to_last_cn": the time (in years) to the "age_last_cn".
         """
         if 'subj' not in df.columns:
             df['subj'] = df['dataset'] + '_' + df['subject']
         
         df['cn_label'] = None
-        
+        df['age_last_cn'] = None
+        df['time_to_last_cn'] = None
+
         for subj in df.loc[df['diagnosis']=='normal', 'subj'].unique():
             if len(df.loc[df['subj']==subj, 'diagnosis'].unique())==1:  # there is only 'normal' in diagnosis history
                 df.loc[df['subj']==subj, 'cn_label'] = 0.5
+                df.loc[df['subj']==subj, 'age_last_cn'] = df.loc[df['subj']==subj, 'age'].max()
                 if len(df.loc[df['subj']==subj, 'age'].unique())>=2:  # at least two sessions are available
                     # pick all but the last session (which is uncertain if it progresses to MCI/AD)
                     df.loc[(df['subj']==subj) & (df['age']!=df.loc[df['subj']==subj,'age'].max()), 'cn_label'] = 1
+        df['time_to_last_cn'] = df['age_last_cn'] - df['age']
+
         num_subj_strict = len(df.loc[df['cn_label']==1, 'subj'].unique())
         num_subj_loose = len(df.loc[df['cn_label']>=0.5, 'subj'].unique())
         print(f'--------> Found {num_subj_strict} subjects with strict CN label, and {num_subj_loose} subjects with loose CN label.')
@@ -274,11 +277,11 @@ class DataPreparation:
         
         return df
         
-    def get_matched_cn_data(self, df_master, df_subset, age_diff_threshold=1, mode='hungry'):
+    def get_matched_cn_data(self, df_master, df_subset, disease, time_diff_threshold=1, mode='hungry_but_picky'):
         """ Use greedy algorithm to sample a subset of cognitively normal data points from the main dataframe df_master.
         The subset matches the data points in df_subset in terms of age and sex. The greedy algorithm will prioritize 
         using subjects that are cognitively normal under the strict definition (cn_label==1). If the search does not find 
-        any data points that satisfy the age_diff_threshold, the greedy algorithm will then use the subjects that are 
+        any data points that satisfy the time_diff_threshold, the greedy algorithm will then use the subjects that are 
         cognitively normal under the loose definition (cn_label==0.5).
             When mode==allow_multiple_per_subject, it is allowed to use more than one data points from the same subject 
         in df_master, as long as the data points are used to match the data points of the same subject in df_subset.
@@ -287,11 +290,13 @@ class DataPreparation:
         the most matched data points to match with. It tends to prioritize using subjects that are cognitively normal under
         the strict definition. But unlike the "allow_multiple_per_subject" and "lavish" mode, it achieves such prioritization
         as a result of the data-intrinsic property, rather than by programmed rule.
+            When mode==hungry_but_picky, the algorithm will try to match as many data points as possible, but it will add one more
+        criteria in addition to the sex and age: the time_to_last_cn should match with the time_to_{disease}.
             The matched subset will be concatenated with df_subset and returned. There will be two new columns:
             - "clf_label": 1 for disease, and 0 for cognitively normal.
             - "match_id": the ID of the matched pair. (could be useful for pair-level split)
         """
-        if mode == 'hungry':
+        if mode in ['hungry_but_picky', 'hungry']:
             df_candidates = df_master.loc[df_master['cn_label']>=0.5, ].copy()
             df_candidates['clf_label'] = 0
             df_candidates['match_id'] = None
@@ -312,7 +317,8 @@ class DataPreparation:
                     subj = todo_subjects[0] if subj != todo_subjects[0] else random.choice(todo_subjects[1:])
                 else:
                     subj = random.choice(todo_subjects)
-                
+
+                # find the candidate subject that has the most matched data points for the current subj                
                 subj_c_most_match = None
                 subj_c_most_match_num = 0
                 for subj_c in df_candidates['subj'].unique():
@@ -322,27 +328,50 @@ class DataPreparation:
                         continue
                     
                     matched_age_c = []
-                    for age in sorted(df_subset.loc[(df_subset['subj']==subj)&df_subset['match_id'].isna(), 'age'].unique()):
-                        for age_c in sorted(df_candidates.loc[(df_candidates['subj']==subj_c)&df_candidates['match_id'].isna(), 'age'].unique()):
-                            if (abs(age_c - age) < age_diff_threshold) and (age_c not in matched_age_c):
-                                matched_age_c.append(age_c)
-                                break
+                    if mode == 'hungry':
+                        for age in sorted(df_subset.loc[(df_subset['subj']==subj)&df_subset['match_id'].isna(), 'age'].unique()):
+                            for age_c in sorted(df_candidates.loc[(df_candidates['subj']==subj_c)&df_candidates['match_id'].isna(), 'age'].unique()):
+                                if (abs(age_c - age) < time_diff_threshold) and (age_c not in matched_age_c):
+                                    matched_age_c.append(age_c)
+                                    break
+                    else:
+                        for age in sorted(df_subset.loc[(df_subset['subj']==subj)&df_subset['match_id'].isna(), 'age'].unique()):
+                            time_to_disease = df_subset.loc[(df_subset['subj']==subj)&(df_subset['age']==age), f'time_to_{disease}'].values[0]
+                            for age_c in sorted(df_candidates.loc[(df_candidates['subj']==subj_c)&df_candidates['match_id'].isna(), 'age'].unique()):
+                                time_to_last_cn = df_candidates.loc[(df_candidates['subj']==subj_c)&(df_candidates['age']==age_c), 'time_to_last_cn'].values[0]
+                                if (abs(age_c - age) < time_diff_threshold) and (abs(time_to_last_cn - time_to_disease) < time_diff_threshold) and (age_c not in matched_age_c):
+                                    matched_age_c.append(age_c)
+                                    break
 
                     if len(matched_age_c) > subj_c_most_match_num:
                         subj_c_most_match = subj_c
                         subj_c_most_match_num = len(matched_age_c)
-                
+                        
                 if subj_c_most_match is not None:
                     ct_add = 0
                     matched_age_c = []
-                    for age in sorted(df_subset.loc[(df_subset['subj']==subj)&df_subset['match_id'].isna(), 'age'].unique()):
-                        for age_c in sorted(df_candidates.loc[(df_candidates['subj']==subj_c_most_match)&df_candidates['match_id'].isna(), 'age'].unique()):
-                            if (abs(age_c - age) < age_diff_threshold) and (age_c not in matched_age_c):
-                                df_subset.loc[(df_subset['subj']==subj)&(df_subset['age']==age), 'match_id'] = match_id
-                                df_candidates.loc[(df_candidates['subj']==subj_c_most_match)&(df_candidates['age']==age_c), 'match_id'] = match_id
-                                match_id += 1
-                                ct_add += 1
-                                break
+                    if mode == 'hungry':
+                        for age in sorted(df_subset.loc[(df_subset['subj']==subj)&df_subset['match_id'].isna(), 'age'].unique()):
+                            for age_c in sorted(df_candidates.loc[(df_candidates['subj']==subj_c_most_match)&df_candidates['match_id'].isna(), 'age'].unique()):
+                                if (abs(age_c - age) < time_diff_threshold) and (age_c not in matched_age_c):
+                                    matched_age_c.append(age_c)
+                                    df_subset.loc[(df_subset['subj']==subj)&(df_subset['age']==age), 'match_id'] = match_id
+                                    df_candidates.loc[(df_candidates['subj']==subj_c_most_match)&(df_candidates['age']==age_c), 'match_id'] = match_id
+                                    match_id += 1
+                                    ct_add += 1
+                                    break
+                    else:
+                        for age in sorted(df_subset.loc[(df_subset['subj']==subj)&df_subset['match_id'].isna(), 'age'].unique()):
+                            time_to_disease = df_subset.loc[(df_subset['subj']==subj)&(df_subset['age']==age), f'time_to_{disease}'].values[0]
+                            for age_c in sorted(df_candidates.loc[(df_candidates['subj']==subj_c_most_match)&df_candidates['match_id'].isna(), 'age'].unique()):
+                                time_to_last_cn = df_candidates.loc[(df_candidates['subj']==subj_c_most_match)&(df_candidates['age']==age_c), 'time_to_last_cn'].values[0]
+                                if (abs(age_c - age) < time_diff_threshold) and (abs(time_to_last_cn - time_to_disease) < time_diff_threshold) and (age_c not in matched_age_c):
+                                    matched_age_c.append(age_c)
+                                    df_subset.loc[(df_subset['subj']==subj)&(df_subset['age']==age), 'match_id'] = match_id
+                                    df_candidates.loc[(df_candidates['subj']==subj_c_most_match)&(df_candidates['age']==age_c), 'match_id'] = match_id
+                                    match_id += 1
+                                    ct_add += 1
+                                    break
 
                     assert ct_add == subj_c_most_match_num, f'ct_add: {ct_add}, subj_c_most_match_num: {subj_c_most_match_num}'
                     num_dp_matched = len(df_subset.loc[df_subset['match_id'].notna(), ].index)
@@ -351,6 +380,7 @@ class DataPreparation:
                 else:
                     stop_ct += 1
                     print(f"Stop count: {stop_ct} / 200")
+
             df_subset_matched = pd.concat([
                 df_subset.loc[df_subset['match_id'].notna(), ], 
                 df_candidates.loc[df_candidates['match_id'].notna(), ]])
@@ -362,7 +392,7 @@ class DataPreparation:
                 used_subj = [] if len(df_subset_matched.index)==0 else df_subset_matched['subj'].unique().tolist()
                 
                 best_match = None
-                best_diff = age_diff_threshold
+                best_diff = time_diff_threshold
                 
                 for _, row_c in df_master.loc[df_master['cn_label']==1, ].iterrows():
                     if row_c['sex'] != row['sex']:
@@ -406,7 +436,7 @@ class DataPreparation:
                 used_subj = [] if len(df_subset_matched.index)==0 else df_subset_matched['subj'].unique().tolist()
                 
                 best_match = None
-                best_diff = age_diff_threshold
+                best_diff = time_diff_threshold
                 
                 for _, row_c in df_master.loc[df_master['cn_label']==1, ].iterrows():
                     if (row_c['subj'] in used_subj) or (row_c['sex'] != row['sex']):
@@ -599,7 +629,7 @@ def visualize_t_minus_n_prediction_results(df_aucs, dict_windowed_results, png):
     assert len(timetoevent_col) == 1
     timetoevent_col = timetoevent_col[0]
     
-    xlim= [-0.25, df_aucs[timetoevent_col].max()+0.25]
+    xlim= [-0.25, df_aucs[timetoevent_col].max()+0.5]
     
     # Upper left block: draw the legend
     ax = fig.add_subplot(gs[:3,0])
@@ -657,7 +687,7 @@ def visualize_t_minus_n_prediction_results(df_aucs, dict_windowed_results, png):
         data_subsets[timetoevent_col] += w_results[timetoevent_col].values.tolist()
     
     ax = fig.add_subplot(gs[3,2])
-    sns.violinplot(data=data_subsets, x=timetoevent_col, y='idx', orient='h', split=True, inner=None, ax=ax)
+    sns.violinplot(data=data_subsets, x=timetoevent_col, y='idx', orient='h', split=True, inner=None, cut=0, density_norm='count', ax=ax)
     ax.vlines(x=df_aucs[timetoevent_col].unique(), ymin=0, ymax=1, transform=ax.get_xaxis_transform(), color='black', linestyle='--', linewidth=linewidth, alpha=0.2)
     ax.set_xlim(left=xlim[0], right=xlim[1])
     ax.invert_xaxis()
@@ -669,8 +699,7 @@ def visualize_t_minus_n_prediction_results(df_aucs, dict_windowed_results, png):
     fig.savefig(png, dpi=600)
     
     
-    
-if __name__ == '__main__':
+def user_input():
     parser = argparse.ArgumentParser(description='"T-0,T-1,...,T-N" MCI/AD prediction experiment')
     parser.add_argument('--wobc', action='store_true', help='when this flag is given, load predictions that are not bias-corrected')
     parser.add_argument('--disease', type=str, default='MCI', help='either "MCI" or "AD"')
@@ -679,77 +708,104 @@ if __name__ == '__main__':
         '"hungry" uses the most greedy approach and thus will result in the most matched data points. '
         '"allow_multiple_per_subject" allows multiple data points from the same subject to be used for matching. '
         '"lavish" will use only one data point from each subject.'))
+    parser.add_argument('--run_all_exp', action='store_true', help='when this flag is given, run through all combinations of user inputs.')
     args = parser.parse_args()
-    DISEASE = args.disease
-    BIAS_CORRECTION = not args.wobc
+
+    if args.run_all_exp:
+        bias_correction_options = [True, False]
+        disease_options = ['MCI', 'AD']
+        match_mode_options = ['hungry_but_picky', 'hungry', 'allow_multiple_per_subject', 'lavish']
+    else:
+        bias_correction_options = [not args.wobc]
+        disease_options = [args.disease]
+        match_mode_options = [args.match_mode]
+    
+    options = {
+        'bias_correction': bias_correction_options,
+        'disease': disease_options,
+        'match_mode': match_mode_options
+    }
+    return options
+
+def run_experiment(bias_correction, disease, match_mode):
+    suffix = '_bc' if bias_correction else '_wobc'
+    suffix += f'_{disease}_{match_mode}'
 
     # Data Preparation
     data_prep = DataPreparation(roster_brain_age_models(), '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti_v2.csv')
-    df = data_prep.load_predictions_of_all_models(bias_correction=BIAS_CORRECTION)
-    df = data_prep.retrieve_diagnosis_label(df)
-    df = data_prep.assign_cn_label(df)
-    df = data_prep.feature_engineering(df)    
-    df = data_prep.mark_progression_subjects_out(df)
-    df.to_csv('experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/data_prep.csv', index=False)
-    df = pd.read_csv('experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/data_prep.csv')
-
+    output_csv = f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/data_prep{"_bc" if bias_correction else "_wobc"}.csv'
+    if Path(output_csv).is_file():
+        df = pd.read_csv(output_csv)
+    else:
+        df = data_prep.load_predictions_of_all_models(bias_correction=bias_correction)
+        df = data_prep.retrieve_diagnosis_label(df)
+        df = data_prep.assign_cn_label(df)
+        df = data_prep.feature_engineering(df)
+        df = data_prep.mark_progression_subjects_out(df)
+        df.to_csv(output_csv, index=False)
+    
     # Data Matching
-    df_interest = df.loc[df[f'time_to_{DISEASE}']>=0, ].copy()
-    df_interest_matched = data_prep.get_matched_cn_data(df_master=df, df_subset=df_interest, age_diff_threshold=1, mode=args.match_mode)
-    df_interest_matched.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/matched_dataset_{DISEASE}_{args.match_mode}.csv', index=False)
-    df_interest_matched = pd.read_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/matched_dataset_{DISEASE}_{args.match_mode}.csv')
-    data_prep.visualize_data_points(df, df_interest_matched, png=f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_progression_data_points_{DISEASE}_matched_with_{args.match_mode}.png', disease='MCI', markout_matched_dp=True)
+    output_csv = f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/matched_dataset{suffix}.csv'
+    if Path(output_csv).is_file():
+        df_interest_matched = pd.read_csv(output_csv)
+    else:
+        df_interest = df.loc[df[f'time_to_{disease}']>=0, ].copy()
+        df_interest_matched = data_prep.get_matched_cn_data(df_master=df, df_subset=df_interest, disease=disease, time_diff_threshold=1, mode=match_mode)
+        df_interest_matched.to_csv(output_csv, index=False)
+    data_prep.visualize_data_points(df, df_interest_matched, png=f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_progression_data_points{suffix}.png', disease=disease)
     
     # Leave-one-subject-out prediction for each classifier-feature pair
-    classifiers = roster_classifiers()
-    feat_combo = roster_feature_combinations(df)
-    prediction_results = pd.DataFrame()
+    output_csv = f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_results{suffix}.csv'
+    if Path(output_csv).is_file():
+        prediction_results = pd.read_csv(output_csv)
+    else:
+        classifiers = roster_classifiers()
+        feat_combo = roster_feature_combinations(df)
+        prediction_results = pd.DataFrame()
 
-    for df_left_out_subj, df_rest in tqdm(LeaveOneSubjectOutDataLoader(df_interest_matched, DISEASE), desc='Leave-one-subject-out prediction'):        
-        for feat_combo_name, feat_cols in feat_combo.items():
-            for clf_name, (clf, clf_params) in classifiers.items():
-                X_rest = df_rest[feat_cols].values
-                y_rest = df_rest['clf_label'].values
-                X_left_out = df_left_out_subj[feat_cols].values
-                y_left_out = df_left_out_subj['clf_label'].values
-                
-                # min-max normalization
-                scaling = MinMaxScaler(feature_range=(-1,1)).fit(X_rest)
-                X_rest = scaling.transform(X_rest)
-                X_left_out = scaling.transform(X_left_out)
-                        
-                # impute missing values
-                imputer = SimpleImputer(strategy='mean')
-                imputer.fit(X_rest)
-                X_rest = imputer.transform(X_rest)
-                X_left_out = imputer.transform(X_left_out)
+        for df_left_out_subj, df_rest in tqdm(LeaveOneSubjectOutDataLoader(df_interest_matched, disease), desc='Leave-one-subject-out prediction'):        
+            for feat_combo_name, feat_cols in feat_combo.items():
+                for clf_name, (clf, clf_params) in classifiers.items():
+                    X_rest = df_rest[feat_cols].values
+                    y_rest = df_rest['clf_label'].values
+                    X_left_out = df_left_out_subj[feat_cols].values
+                    y_left_out = df_left_out_subj['clf_label'].values
+                    
+                    # min-max normalization
+                    scaling = MinMaxScaler(feature_range=(-1,1)).fit(X_rest)
+                    X_rest = scaling.transform(X_rest)
+                    X_left_out = scaling.transform(X_left_out)
+                            
+                    # impute missing values
+                    imputer = SimpleImputer(strategy='mean')
+                    imputer.fit(X_rest)
+                    X_rest = imputer.transform(X_rest)
+                    X_left_out = imputer.transform(X_left_out)
 
-                # classification
-                clf_instance = clf(**clf_params)
-                clf_instance.fit(X_rest, y_rest)
-                y_pred_proba = clf_instance.predict_proba(X_left_out)
-                
-                # record the prediction results
-                results = df_left_out_subj[['subj','sex','age','diagnosis','cn_label',f'age_{DISEASE}',f'time_to_{DISEASE}','clf_label','match_id']].copy()
-                results['feat_combo_name'] = feat_combo_name
-                results['clf_name'] = clf_name
-                results['y_pred_proba_0'] = y_pred_proba[:,0]
-                results['y_pred_proba_1'] = y_pred_proba[:,1]
-                prediction_results = pd.concat([prediction_results, results], ignore_index=True)
-                
-    prediction_results.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_results_{DISEASE}_{args.match_mode}.csv', index=False)    
-    prediction_results = pd.read_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_results_{DISEASE}_{args.match_mode}.csv')
-    
+                    # classification
+                    clf_instance = clf(**clf_params)
+                    clf_instance.fit(X_rest, y_rest)
+                    y_pred_proba = clf_instance.predict_proba(X_left_out)
+                    
+                    # record the prediction results
+                    results = df_left_out_subj[['subj','sex','age','diagnosis','cn_label',f'age_{disease}',f'time_to_{disease}','clf_label','match_id']].copy()
+                    results['feat_combo_name'] = feat_combo_name
+                    results['clf_name'] = clf_name
+                    results['y_pred_proba_0'] = y_pred_proba[:,0]
+                    results['y_pred_proba_1'] = y_pred_proba[:,1]
+                    prediction_results = pd.concat([prediction_results, results], ignore_index=True)
+        prediction_results.to_csv(output_csv, index=False)
+        
     # Sliding window
     window_size = 1
     window_step = 0.5
-    num_window = int((prediction_results[f'time_to_{DISEASE}'].max() - window_size) / window_step) + 1
+    num_window = int((prediction_results[f'time_to_{disease}'].max() - window_size) / window_step) + 1
     dict_windowed_results = {}
 
     # T-0
     w_results = pd.DataFrame()
-    for subj in prediction_results.loc[prediction_results[f'time_to_{DISEASE}']==0, 'subj'].unique():
-        subj_rows = prediction_results.loc[(prediction_results['subj']==subj)&(prediction_results[f'time_to_{DISEASE}']==0), ]
+    for subj in prediction_results.loc[prediction_results[f'time_to_{disease}']==0, 'subj'].unique():
+        subj_rows = prediction_results.loc[(prediction_results['subj']==subj)&(prediction_results[f'time_to_{disease}']==0), ]
         assert subj_rows['match_id'].nunique() == 1, f"Multiple data points found for {subj} at T-0."
         match_id = subj_rows['match_id'].unique()[0]
         w_results = pd.concat([w_results, prediction_results.loc[prediction_results['match_id']==match_id, ]])
@@ -762,14 +818,14 @@ if __name__ == '__main__':
         window_end = window_start + window_size
         
         # if no one is in the window, skip
-        subjs = prediction_results.loc[(prediction_results[f'time_to_{DISEASE}']>window_start)&(prediction_results[f'time_to_{DISEASE}']<=window_end), 'subj'].unique()
+        subjs = prediction_results.loc[(prediction_results[f'time_to_{disease}']>window_start)&(prediction_results[f'time_to_{disease}']<=window_end), 'subj'].unique()
         if len(subjs) < 3:
             print(f'Fewer than 3 subjects found in the window [{window_start}, {window_end}].')
             continue
         
         w_results = pd.DataFrame()
         for subj in subjs:
-            subj_rows = prediction_results.loc[(prediction_results['subj']==subj)&(prediction_results[f'time_to_{DISEASE}']>window_start)&(prediction_results[f'time_to_{DISEASE}']<=window_end), ]
+            subj_rows = prediction_results.loc[(prediction_results['subj']==subj)&(prediction_results[f'time_to_{disease}']>window_start)&(prediction_results[f'time_to_{disease}']<=window_end), ]
             
             if len(subj_rows['match_id'].unique()) == 1:
                 match_id = subj_rows['match_id'].unique()[0]
@@ -777,25 +833,27 @@ if __name__ == '__main__':
                 most_center_match_id = None
                 smallest_distance = window_size*0.5
                 for match_id in subj_rows['match_id'].unique():
-                    distance = abs(subj_rows.loc[subj_rows['match_id']==match_id, f'time_to_{DISEASE}'].values[0] - (window_start + window_end)*0.5)
+                    distance = abs(subj_rows.loc[subj_rows['match_id']==match_id, f'time_to_{disease}'].values[0] - (window_start + window_end)*0.5)
                     if distance < smallest_distance:
                         smallest_distance = distance
                         most_center_match_id = match_id
                 match_id = most_center_match_id
             else:
                 raise ValueError(f'No match found for {subj} in the window [{window_start}, {window_end}].')
-           
+            
             w_results = pd.concat([w_results, prediction_results.loc[prediction_results['match_id']==match_id, ]])
         dict_windowed_results[idx] = w_results
         idx += 1
         
     # AUC Bootstrap
     num_bootstrap = 1000  # number of bootstraps
-    dict_aucs = {'idx': [], f'time_to_{DISEASE}': [], 'feat_combo_name': [] , 'clf_name': [], 
-                 'auc_mean': [], 'auc_upper': [], 'auc_lower': []}
+    dict_aucs = {
+        'idx': [], f'time_to_{disease}': [], 'feat_combo_name': [] , 'clf_name': [], 
+        'auc_mean': [], 'auc_upper': [], 'auc_lower': []
+        }
 
     for idx, w_results in tqdm(dict_windowed_results.items(), desc='AUC Bootstrap'):
-        time_mean = w_results.loc[w_results['clf_label']==1, f'time_to_{DISEASE}'].mean()
+        time_mean = w_results.loc[w_results['clf_label']==1, f'time_to_{disease}'].mean()
         
         for feat_combo_name in w_results['feat_combo_name'].unique():
             for clf_name in w_results['clf_name'].unique():
@@ -813,7 +871,7 @@ if __name__ == '__main__':
                 confidence_interval = np.percentile(aucs, [2.5, 97.5])  # 95% CI
                 
                 dict_aucs['idx'].append(idx)
-                dict_aucs[f'time_to_{DISEASE}'].append(time_mean)
+                dict_aucs[f'time_to_{disease}'].append(time_mean)
                 dict_aucs['feat_combo_name'].append(feat_combo_name)
                 dict_aucs['clf_name'].append(clf_name)
                 dict_aucs['auc_mean'].append(auc_mean)
@@ -821,6 +879,13 @@ if __name__ == '__main__':
                 dict_aucs['auc_lower'].append(confidence_interval[0])
                 
     df_aucs = pd.DataFrame(dict_aucs)
-    df_aucs.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_auc_bootstrap_{DISEASE}_{args.match_mode}.csv', index=False)
-    df_aucs = pd.read_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_auc_bootstrap_{DISEASE}_{args.match_mode}.csv')
-    visualize_t_minus_n_prediction_results(df_aucs, dict_windowed_results, png=f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_t_minus_n_prediction_results_{DISEASE}_{args.match_mode}.png')
+    df_aucs.to_csv(f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_auc_bootstrap{suffix}.csv', index=False)
+    visualize_t_minus_n_prediction_results(df_aucs, dict_windowed_results, png=f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_t_minus_n_prediction_results{suffix}.png')
+
+if __name__ == '__main__':
+    options = user_input()
+
+    for bias_correction in options['bias_correction']:
+        for disease in options['disease']:
+            for match_mode in options['match_mode']:
+                run_experiment(bias_correction, disease, match_mode)
