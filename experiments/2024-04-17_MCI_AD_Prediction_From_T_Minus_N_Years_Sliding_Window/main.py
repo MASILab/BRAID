@@ -740,21 +740,24 @@ def user_input():
     parser.add_argument('--match_dataset', action='store_true', help='when this flag is given, the data matching should consider the "dataset" label as well.')
     parser.add_argument('--age_min', type=int, default=0, help='the minimum age of data points to be included in the analysis. Default: 0 (years)')
     parser.add_argument('--age_max', type=int, default=1000, help='the maximum age of data points to be included in the analysis. Default: 1000 (years)')
+    parser.add_argument('--window_size', type=int, default=2, help='the size of the sliding window. Default: 2 (years)')
     parser.add_argument('--run_all_exp', action='store_true', help='when this flag is given, run through all combinations of user inputs that make sense.')
     args = parser.parse_args()
 
     if args.run_all_exp:
         bias_correction_options = [True]
-        disease_options = ['MCI']
+        disease_options = ['MCI', 'AD']
         match_mode_options = ['hungry_but_picky']
         match_dataset_options = [False]
         age_range_options = [(0, 1000), (45, 90)]
+        window_size_options = [1, 2]
     else:
         bias_correction_options = [not args.wobc]
         disease_options = [args.disease]
         match_mode_options = [args.match_mode]
         match_dataset_options = [args.match_dataset]
         age_range_options = [(args.age_min, args.age_max)]
+        window_size_options = [args.window_size]
     
     options = {
         'bias_correction': bias_correction_options,
@@ -762,18 +765,15 @@ def user_input():
         'match_mode': match_mode_options,
         'match_dataset': match_dataset_options,
         'age_range': age_range_options,
+        'window_size': window_size_options,
     }
     return options
 
-def run_experiment(bias_correction, disease, match_mode, match_dataset, age_range):
-    suffix = '_w-bc' if bias_correction else '_wo-bc'
-    suffix += f'_{disease}_{match_mode}'
-    suffix += '_cn-match-w-dataset' if match_dataset else '_cn-match-wo-dataset'
-    suffix += f'_age-{age_range[0]}-{age_range[1]}'
-
+def run_experiment(bias_correction, disease, match_mode, match_dataset, age_range, window_size):
     # Data Preparation
     data_prep = DataPreparation(roster_brain_age_models(), '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti_v2.csv')
-    output_csv = f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/data_prep{"_w-bc" if bias_correction else "_wo-bc"}.csv'
+    suffix = '_w-bc' if bias_correction else '_wo-bc'
+    output_csv = f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/data_prep{suffix}.csv'
     if Path(output_csv).is_file():
         df = pd.read_csv(output_csv)
     else:
@@ -785,6 +785,7 @@ def run_experiment(bias_correction, disease, match_mode, match_dataset, age_rang
         df.to_csv(output_csv, index=False)
     
     # Data Matching
+    suffix += f'_{disease}_age-{age_range[0]}-{age_range[1]}_{match_mode}_{"match-w-dataset" if match_dataset else "match-wo-dataset"}'
     output_csv = f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/matched_dataset{suffix}.csv'
     if Path(output_csv).is_file():
         df_interest_matched = pd.read_csv(output_csv)
@@ -792,7 +793,7 @@ def run_experiment(bias_correction, disease, match_mode, match_dataset, age_rang
         df_interest = df.loc[(df[f'time_to_{disease}']>=0) & df['age'].between(age_range[0],age_range[1]), ].copy()
         df_interest_matched = data_prep.get_matched_cn_data(df_master=df, df_subset=df_interest, disease=disease, time_diff_threshold=1, mode=match_mode, match_dataset=match_dataset)
         df_interest_matched.to_csv(output_csv, index=False)
-    # data_prep.visualize_data_points(df, df_interest_matched, png=f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_progression_data_points{suffix}.png', disease=disease)
+    data_prep.visualize_data_points(df, df_interest_matched, png=f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_progression_data_points{suffix}.png', disease=disease)
     
     # Leave-one-subject-out prediction for each classifier-feature pair
     output_csv = f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_results{suffix}.csv'
@@ -837,8 +838,7 @@ def run_experiment(bias_correction, disease, match_mode, match_dataset, age_rang
         prediction_results.to_csv(output_csv, index=False)
         
     # Sliding window
-    window_size = 2
-    window_step = 1
+    window_step = window_size*0.5
     num_window = int((prediction_results[f'time_to_{disease}'].max() - window_size) / window_step) + 1
     dict_windowed_results = {}
 
@@ -886,6 +886,7 @@ def run_experiment(bias_correction, disease, match_mode, match_dataset, age_rang
         idx += 1
         
     # AUC Bootstrap
+    suffix += f'_ws-{window_size}'
     output_csv = f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_auc_bootstrap{suffix}.csv'
     if Path(output_csv).is_file():
         df_aucs = pd.read_csv(output_csv)
@@ -934,4 +935,5 @@ if __name__ == '__main__':
             for match_mode in options['match_mode']:
                 for match_dataset in options['match_dataset']:
                     for age_range in options['age_range']:
-                        run_experiment(bias_correction, disease, match_mode, match_dataset, age_range)
+                        for window_size in options['window_size']:
+                            run_experiment(bias_correction, disease, match_mode, match_dataset, age_range, window_size)
