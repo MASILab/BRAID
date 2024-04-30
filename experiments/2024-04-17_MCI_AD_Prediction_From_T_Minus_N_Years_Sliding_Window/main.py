@@ -617,35 +617,44 @@ def visualize_t_minus_n_prediction_results(df_aucs, dict_windowed_results, png):
     # hyperparameters
     fontsize = 9
     fontfamily = 'DejaVu Sans'
-    linewidth = 1.5
+    linewidth = 2
     fig = plt.figure(figsize=(6.5, 8), tight_layout=True)
     gs = gridspec.GridSpec(nrows=4, ncols=3, wspace=0, hspace=0, width_ratios=[0.75, 0.25, 1],  height_ratios=[1, 1, 1, 1])
     clf_names = ['Logistic Regression','Linear SVM','Random Forest']
-    
     dict_feat_combos = {
-        'basic: chronological age + sex': {'color': 'tab:gray', 'alpha': 0.4},
-        'basic + WM age nonlinear': {'color': 'tab:blue', 'alpha': 0.8},
-        'basic + GM age (ours)': {'color': 'tab:red', 'alpha': 0.8},
-        'basic + GM age (TSAN)': {'color': 'darkred', 'alpha': 0.4},
-        'basic + GM age (DeepBrainNet)': {'color': 'indianred', 'alpha': 0.4},
-        'basic + WM age affine': {'color': 'tab:purple', 'alpha': 0.4},
-        'basic + WM age nonlinear + GM age (ours)': {'color': 'tab:orange', 'alpha': 0.8},
-        'basic + WM age nonlinear + GM age (TSAN)': {'color': 'wheat', 'alpha': 0.4},
-        'basic + WM age nonlinear + GM age (DeepBrainNet)': {'color': 'gold', 'alpha': 0.4},
+        'basic: chronological age + sex': {'color': (0,0,0), 'alpha': 0.5, 'linestyle': 'solid'},
+        'basic + WM age nonlinear': {'color': (0,0,1), 'alpha': 1, 'linestyle': 'solid'},
+        'basic + WM age affine': {'color': (0.5,0,1), 'alpha': 1, 'linestyle': 'solid'},
+        'basic + GM age (ours)': {'color': (1,0,0), 'alpha': 1, 'linestyle': 'solid'},
+        'basic + GM age (DeepBrainNet)': {'color': (1,0.5,0.5), 'alpha': 1, 'linestyle': 'dashed'},
+        'basic + GM age (TSAN)': {'color': (0.5,0,0), 'alpha': 1, 'linestyle': 'dotted'},
+        'basic + WM age nonlinear + GM age (ours)': {'color': (0,1,0), 'alpha': 1, 'linestyle': 'solid'},
+        'basic + WM age nonlinear + GM age (DeepBrainNet)': {'color': (0.5,1,0.5), 'alpha': 1, 'linestyle': 'dashed'},        
+        'basic + WM age nonlinear + GM age (TSAN)': {'color': (0,0.5,0), 'alpha': 1, 'linestyle': 'dotted'},        
     }
+    feat_vis_order = [
+        'basic: chronological age + sex',
+        'basic + WM age nonlinear + GM age (TSAN)', 'basic + WM age nonlinear + GM age (DeepBrainNet)',
+        'basic + WM age nonlinear + GM age (ours)',
+        'basic + GM age (TSAN)', 'basic + GM age (DeepBrainNet)', 'basic + GM age (ours)',
+        'basic + WM age affine', 'basic + WM age nonlinear',
+    ]
 
     timetoevent_col = [col for col in df_aucs.columns if 'time_to_' in col]
     assert len(timetoevent_col) == 1
     timetoevent_col = timetoevent_col[0]
+    disease = timetoevent_col.replace('time_to_', '')
     
     xlim= [-0.25, df_aucs[timetoevent_col].max()+0.5]
+    ylim = [0.35, 0.85]
+    y_ticks = [0.4, 0.5, 0.6, 0.7, 0.8]
     
     # Upper left block: draw the legend
     ax = fig.add_subplot(gs[:3,0])
     lines = []
     for feat_combo in dict_feat_combos.keys():
         label_txt = textwrap.fill(feat_combo, width=25)
-        line = mlines.Line2D([], [], color=dict_feat_combos[feat_combo]['color'], alpha=dict_feat_combos[feat_combo]['alpha'], linewidth=linewidth, label=label_txt)
+        line = mlines.Line2D([], [], color=dict_feat_combos[feat_combo]['color'], alpha=dict_feat_combos[feat_combo]['alpha'], linestyle=dict_feat_combos[feat_combo]['linestyle'], linewidth=linewidth, label=label_txt)
         lines.append(line)
     ax.legend(handles=lines, 
               prop={'size':fontsize, 'family':fontfamily}, 
@@ -653,24 +662,25 @@ def visualize_t_minus_n_prediction_results(df_aucs, dict_windowed_results, png):
               frameon=True, 
               loc='upper left', 
               bbox_to_anchor=(0, 1), 
-              title='Feature Combination',
-              title_fontproperties={'size':fontsize, 'family':fontfamily, 'weight':'bold'})
+              title=f'Features for {disease} Prediction',
+              title_fontproperties={'size':fontsize, 'family':fontfamily})
     ax.axis('off')
     
     # Upper middle block: y axis label
     ax = fig.add_subplot(gs[:3,1])
-    ax.text(0.2, 0.5, 'Area under the ROC Curve', fontsize=fontsize, fontfamily=fontfamily, ha='center', va='center', rotation='vertical', transform=ax.transAxes)
+    ax.text(0.2, 0.5, 'Area under the Roc Curve', fontsize=fontsize, fontfamily=fontfamily, ha='center', va='center', rotation='vertical', transform=ax.transAxes)
     ax.axis('off')
     
     # Upper right block: draw the AUC plots
     for i, classifier in enumerate(clf_names):
         ax = fig.add_subplot(gs[i,2])
-        for feat_combo in dict_feat_combos.keys():
+        for feat_combo in feat_vis_order:
             data = df_aucs.loc[(df_aucs['clf_name']==classifier)&(df_aucs['feat_combo_name']==feat_combo), ].copy()
             ax.plot(
                 data[timetoevent_col].values,
                 data['auc_mean'].values,
                 linewidth=linewidth,
+                linestyle=dict_feat_combos[feat_combo]['linestyle'],
                 color=dict_feat_combos[feat_combo]['color'],
                 alpha=dict_feat_combos[feat_combo]['alpha'],
                 )
@@ -679,18 +689,22 @@ def visualize_t_minus_n_prediction_results(df_aucs, dict_windowed_results, png):
                 y1=data['auc_upper'].values,
                 y2=data['auc_lower'].values,
                 color=dict_feat_combos[feat_combo]['color'],
-                alpha=dict_feat_combos[feat_combo]['alpha']*0.2,
+                alpha=dict_feat_combos[feat_combo]['alpha']*0.1,
                 linewidth=0)
-        ax.vlines(x=df_aucs[timetoevent_col].unique(), ymin=0, ymax=1, transform=ax.get_xaxis_transform(), color='black', linestyle='--', linewidth=linewidth, alpha=0.2)
+            
+        ax.vlines(x=df_aucs[timetoevent_col].unique(), ymin=0, ymax=1, transform=ax.get_xaxis_transform(), color=(0,0,0), linestyle='-', linewidth=1, alpha=0.1)
         ax.text(0.02, 0.95, classifier, fontsize=fontsize, fontfamily=fontfamily, transform=ax.transAxes, verticalalignment='top')
         ax.set_xlim(left=xlim[0], right=xlim[1])
+        ax.set_xticks([])
+
+        ax.set_ylim(bottom=ylim[0], top=ylim[1])
+        ax.set_yticks(y_ticks)
         ax.invert_xaxis()
         ax.set_ylabel('')
 
-    # Bottom left:
     # Bottom middle block: y axis label
     ax = fig.add_subplot(gs[3,1])
-    ax.text(0.2, 0.5, f'subsets from sliding windows', fontsize=fontsize, fontfamily=fontfamily, ha='center', va='center', rotation='vertical', transform=ax.transAxes)
+    ax.text(0.2, 0.5, f'Subsets from Sliding Windows', fontsize=fontsize, fontfamily=fontfamily, ha='center', va='center', rotation='vertical', transform=ax.transAxes)
     ax.axis('off')
     
     # Bottom right: draw time-to-event distribution raincloud plot
@@ -703,11 +717,11 @@ def visualize_t_minus_n_prediction_results(df_aucs, dict_windowed_results, png):
     data_subsets = pd.DataFrame(data_subsets)
     
     ax = fig.add_subplot(gs[3,2])
-    sns.violinplot(data=data_subsets, x=timetoevent_col, y='idx', orient='h', color='dimgray', width=2, linewidth=1, split=True, inner=None, cut=0, density_norm='count', ax=ax)
-    ax.vlines(x=df_aucs[timetoevent_col].unique(), ymin=0, ymax=1, transform=ax.get_xaxis_transform(), color='black', linestyle='--', linewidth=linewidth, alpha=0.2)
-    for idx in data_subsets['idx'].unique(): # annotate the number of MCI/AD data points in each subset
+    sns.violinplot(data=data_subsets, x=timetoevent_col, y='idx', orient='h', color='gray', width=2, linewidth=1, split=True, inner=None, cut=0, density_norm='count', ax=ax)
+    ax.vlines(x=df_aucs[timetoevent_col].unique(), ymin=0, ymax=1, transform=ax.get_xaxis_transform(), color=(0,0,0), linestyle='-', linewidth=1, alpha=0.1)
+    for idx in data_subsets['idx'].unique():
         num = data_subsets.loc[data_subsets['idx']==idx, 'num_pairs'].values[0]
-        ax.text(data_subsets.loc[data_subsets['idx']==idx, timetoevent_col].mean(), idx+1.5, f'{num}', fontsize=fontsize*0.5, fontfamily=fontfamily, va='center')
+        ax.text(data_subsets.loc[data_subsets['idx']==idx, timetoevent_col].mean(), idx+1.5, f'{num}', fontsize=fontsize*0.75, fontfamily=fontfamily, ha='center', va='center')
     ax.set_xlim(left=xlim[0], right=xlim[1])
     ax.invert_xaxis()
     ax.set_yticks([])
@@ -731,9 +745,9 @@ def user_input():
 
     if args.run_all_exp:
         bias_correction_options = [True]
-        disease_options = ['MCI', 'AD']
+        disease_options = ['MCI']
         match_mode_options = ['hungry_but_picky']
-        match_dataset_options = [True, False]
+        match_dataset_options = [False]
         age_range_options = [(0, 1000), (45, 90)]
     else:
         bias_correction_options = [not args.wobc]
@@ -778,7 +792,7 @@ def run_experiment(bias_correction, disease, match_mode, match_dataset, age_rang
         df_interest = df.loc[(df[f'time_to_{disease}']>=0) & df['age'].between(age_range[0],age_range[1]), ].copy()
         df_interest_matched = data_prep.get_matched_cn_data(df_master=df, df_subset=df_interest, disease=disease, time_diff_threshold=1, mode=match_mode, match_dataset=match_dataset)
         df_interest_matched.to_csv(output_csv, index=False)
-    data_prep.visualize_data_points(df, df_interest_matched, png=f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_progression_data_points{suffix}.png', disease=disease)
+    # data_prep.visualize_data_points(df, df_interest_matched, png=f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_progression_data_points{suffix}.png', disease=disease)
     
     # Leave-one-subject-out prediction for each classifier-feature pair
     output_csv = f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/prediction_results{suffix}.csv'
@@ -823,8 +837,8 @@ def run_experiment(bias_correction, disease, match_mode, match_dataset, age_rang
         prediction_results.to_csv(output_csv, index=False)
         
     # Sliding window
-    window_size = 1
-    window_step = 0.5
+    window_size = 2
+    window_step = 1
     num_window = int((prediction_results[f'time_to_{disease}'].max() - window_size) / window_step) + 1
     dict_windowed_results = {}
 
