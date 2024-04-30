@@ -1,5 +1,4 @@
 import pdb
-import random
 import textwrap
 import argparse
 import numpy as np
@@ -11,17 +10,12 @@ import matplotlib.lines as mlines
 from tqdm import tqdm
 from pathlib import Path
 from warnings import simplefilter
-from sklearn.utils import resample
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
-from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, confusion_matrix, roc_auc_score
-from sklearn.experimental import enable_iterative_imputer
-from sklearn.impute import SimpleImputer, IterativeImputer, KNNImputer
-from sklearn.svm import LinearSVC
-from sklearn.feature_selection import SelectFromModel, SequentialFeatureSelector
+from sklearn.metrics import roc_auc_score
+from sklearn.impute import SimpleImputer
 simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
 
 def roster_brain_age_models():
@@ -277,21 +271,22 @@ class DataPreparation:
         
         return df
         
-    def get_matched_cn_data(self, df_master, df_subset, disease, time_diff_threshold=1, mode='hungry_but_picky'):
+    def get_matched_cn_data(self, df_master, df_subset, disease, time_diff_threshold=1, mode='hungry_but_picky', match_dataset=False):
         """ Use greedy algorithm to sample a subset of cognitively normal (CN) data points from the main dataframe df_master.
-        The subset matches the data points in df_subset in terms of age, sex, dataset, (and time_to_{event} when mode="hungry_but_picky").
+        The subset matches the data points in df_subset in terms of age, sex, dataset (when match_dataset=True), and 
+        time_to_{event, i.e., first MCI/AD or last CN} (when mode="hungry_but_picky").
             
             The following modes (matching strategies) are available (ordered by the time it was implemented):
-            - "lavish": finds matches based on the age, sex, and dataset. It prioritizes using the subjects that are CN 
-        under the strict definition (cn_label==1). If it does not find any match, it will then use the subjects that are 
-        CN under the loose definition (cn_label==0.5). Data points with the closest age will be used. Only one data point
-        from the same subject is allowed to be used. And that is why it is called "lavish".
+            - "lavish": finds matches based on the age, sex, and dataset (when match_dataset=True). It prioritizes using 
+        the subjects that are CN under the strict definition (cn_label==1). If it does not find any match, it will then use 
+        the subjects that are CN under the loose definition (cn_label==0.5). Data points with the closest age will be used. 
+        Only one data point from the same subject is allowed to be used. And that is why it is called "lavish".
             - "allow_multiple_per_subject": follows the same rules as the "lavish" mode, except that it is allowed to use
         more than one data points from the same subject as long as these data points are used to match the data points of 
         the same subject in df_subset.
-            - "hungry": finds matches based on the age, sex, and dataset. It tries to match as many data points as possible. 
-        It will start from the subjects in the df_subset that have the most data points to be matched, and use the subject 
-        in df_master that has the most matched data points to match with.
+            - "hungry": finds matches based on the age, sex, and dataset (when match_dataset=True). It tries to match as many 
+        data points as possible. It will start from the subjects in the df_subset that have the most data points to be matched, 
+        and use the subject in df_master that has the most matched data points to match with.
             - "hungry_but_picky": follows the same rules as the "hungry" mode, except that it will add one more criteria for
         matching: the time_to_last_cn should match with the time_to_{disease}.
         
@@ -309,20 +304,20 @@ class DataPreparation:
 
             match_id = 0
             subj = None
-            subj_cache = []
-            stop_ct = 0
+            subjs_done = []
 
-            while stop_ct < 100:
+            while True:
                 todo_subjects = df_subset.loc[df_subset['match_id'].isna(), ].groupby('subj').size().sort_values(ascending=False).index
                 if len(todo_subjects) == 0:
-                    print('All subjects matched.')
+                    print('Data matching done.')
                     break
-                elif len(todo_subjects)>10:
-                    top_todo_subjects = [s for s in todo_subjects[:5] if s not in subj_cache[-5:]]
-                    subj = top_todo_subjects[0] if len(top_todo_subjects) != 0 else random.choice(todo_subjects[5:10])                    
                 else:
-                    subj = random.choice(todo_subjects)
-                subj_cache.append(subj)
+                    todo_subjects = [s for s in todo_subjects if s not in subjs_done]
+                    if len(todo_subjects) == 0:
+                        print('Data matching done.')
+                        break
+                    else:
+                        subj = todo_subjects[0]
                 
                 # find the candidate subject that has the most matched data points for the current subj                
                 subj_c_most_match = None
@@ -332,7 +327,7 @@ class DataPreparation:
                         continue  # because already used in previous match
                     if df_candidates.loc[df_candidates['subj']==subj_c, 'sex'].values[0] != df_subset.loc[df_subset['subj']==subj, 'sex'].values[0]:
                         continue
-                    if df_candidates.loc[df_candidates['subj']==subj_c, 'dataset'].values[0] != df_subset.loc[df_subset['subj']==subj, 'dataset'].values[0]:
+                    if (df_candidates.loc[df_candidates['subj']==subj_c, 'dataset'].values[0] != df_subset.loc[df_subset['subj']==subj, 'dataset'].values[0]) and match_dataset:
                         continue
                     
                     matched_age_c = []
@@ -384,10 +379,8 @@ class DataPreparation:
                     assert ct_add == subj_c_most_match_num, f'ct_add: {ct_add}, subj_c_most_match_num: {subj_c_most_match_num}'
                     num_dp_matched = len(df_subset.loc[df_subset['match_id'].notna(), ].index)
                     print(f"Matched {subj_c_most_match_num} data points of {subj_c_most_match}. {num_dp_matched} (matched) / {num_dp_total} (total)")
-                    stop_ct = 0
                 else:
-                    stop_ct += 1
-                    print(f"Stop count: {stop_ct} / 100")
+                    subjs_done.append(subj)
 
             df_subset_matched = pd.concat([
                 df_subset.loc[df_subset['match_id'].notna(), ], 
@@ -403,7 +396,9 @@ class DataPreparation:
                 best_diff = time_diff_threshold
                 
                 for _, row_c in df_master.loc[df_master['cn_label']==1, ].iterrows():
-                    if (row_c['sex'] != row['sex']) or (row_c['dataset'] != row['dataset']):
+                    if (row_c['sex'] != row['sex']):
+                        continue
+                    if (row_c['dataset'] != row['dataset']) and match_dataset:
                         continue
                     if row_c['subj'] in used_subj:
                         where_this_subj_was_used = df_subset_matched.loc[df_subset_matched['subj']==row_c['subj'], 'match_id'].unique()
@@ -417,7 +412,9 @@ class DataPreparation:
                 
                 if best_match is None:
                     for _, row_c in df_master.loc[df_master['cn_label']==0.5, ].iterrows():
-                        if (row_c['sex'] != row['sex']) or (row_c['dataset'] != row['dataset']):
+                        if (row_c['sex'] != row['sex']):
+                            continue
+                        if (row_c['dataset'] != row['dataset']) and match_dataset:
                             continue
                         if row_c['subj'] in used_subj:
                             where_this_subj_was_used = df_subset_matched.loc[df_subset_matched['subj']==row_c['subj'], 'match_id'].unique()
@@ -447,7 +444,9 @@ class DataPreparation:
                 best_diff = time_diff_threshold
                 
                 for _, row_c in df_master.loc[df_master['cn_label']==1, ].iterrows():
-                    if (row_c['subj'] in used_subj) or (row_c['sex'] != row['sex']) or (row_c['dataset'] != row['dataset']):
+                    if (row_c['subj'] in used_subj) or (row_c['sex'] != row['sex']):
+                        continue
+                    if (row_c['dataset'] != row['dataset']) and match_dataset:
                         continue
                     age_diff = abs(row_c['age'] - row['age'])
                     if age_diff < best_diff:
@@ -456,7 +455,9 @@ class DataPreparation:
                 
                 if best_match is None:
                     for _, row_c in df_master.loc[df_master['cn_label']==0.5, ].iterrows():
-                        if (row_c['subj'] in used_subj) or (row_c['sex'] != row['sex']) or (row_c['dataset'] != row['dataset']):
+                        if (row_c['subj'] in used_subj) or (row_c['sex'] != row['sex']):
+                            continue
+                        if (row_c['dataset'] != row['dataset']) and match_dataset:
                             continue
                         age_diff = abs(row_c['age'] - row['age'])
                         if age_diff < best_diff:
@@ -720,34 +721,45 @@ def visualize_t_minus_n_prediction_results(df_aucs, dict_windowed_results, png):
 def user_input():
     parser = argparse.ArgumentParser(description='"T-0,T-1,...,T-N" MCI/AD prediction experiment')
     parser.add_argument('--wobc', action='store_true', help='when this flag is given, load predictions that are not bias-corrected')
-    parser.add_argument('--disease', type=str, default='MCI', help='either "MCI" or "AD"')
-    parser.add_argument('--match_mode', type=str, default='hungry_but_picky', help='either "hungry_but_picky", "hungry", "allow_multiple_per_subject", or "lavish".')
-    parser.add_argument('--run_all_exp', action='store_true', help='when this flag is given, run through all combinations of user inputs.')
+    parser.add_argument('--disease', type=str, default='MCI', help='either "MCI" or "AD". Default: "MCI"')
+    parser.add_argument('--match_mode', type=str, default='hungry_but_picky', help='either "hungry_but_picky", "hungry", "allow_multiple_per_subject", or "lavish". Default: "hungry_but_picky"')
+    parser.add_argument('--match_dataset', action='store_true', help='when this flag is given, the data matching should consider the "dataset" label as well.')
+    parser.add_argument('--age_min', type=int, default=0, help='the minimum age of data points to be included in the analysis. Default: 0 (years)')
+    parser.add_argument('--age_max', type=int, default=1000, help='the maximum age of data points to be included in the analysis. Default: 1000 (years)')
+    parser.add_argument('--run_all_exp', action='store_true', help='when this flag is given, run through all combinations of user inputs that make sense.')
     args = parser.parse_args()
 
     if args.run_all_exp:
-        bias_correction_options = [True, False]
+        bias_correction_options = [True]
         disease_options = ['MCI', 'AD']
-        match_mode_options = ['hungry_but_picky', 'hungry', 'allow_multiple_per_subject', 'lavish']
+        match_mode_options = ['hungry_but_picky']
+        match_dataset_options = [True, False]
+        age_range_options = [(0, 1000), (45, 90)]
     else:
         bias_correction_options = [not args.wobc]
         disease_options = [args.disease]
         match_mode_options = [args.match_mode]
+        match_dataset_options = [args.match_dataset]
+        age_range_options = [(args.age_min, args.age_max)]
     
     options = {
         'bias_correction': bias_correction_options,
         'disease': disease_options,
-        'match_mode': match_mode_options
+        'match_mode': match_mode_options,
+        'match_dataset': match_dataset_options,
+        'age_range': age_range_options,
     }
     return options
 
-def run_experiment(bias_correction, disease, match_mode):
-    suffix = '_bc' if bias_correction else '_wobc'
+def run_experiment(bias_correction, disease, match_mode, match_dataset, age_range):
+    suffix = '_w-bc' if bias_correction else '_wo-bc'
     suffix += f'_{disease}_{match_mode}'
+    suffix += '_cn-match-w-dataset' if match_dataset else '_cn-match-wo-dataset'
+    suffix += f'_age-{age_range[0]}-{age_range[1]}'
 
     # Data Preparation
     data_prep = DataPreparation(roster_brain_age_models(), '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti_v2.csv')
-    output_csv = f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/data_prep{"_bc" if bias_correction else "_wobc"}.csv'
+    output_csv = f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data/data_prep{"_w-bc" if bias_correction else "_wo-bc"}.csv'
     if Path(output_csv).is_file():
         df = pd.read_csv(output_csv)
     else:
@@ -763,8 +775,8 @@ def run_experiment(bias_correction, disease, match_mode):
     if Path(output_csv).is_file():
         df_interest_matched = pd.read_csv(output_csv)
     else:
-        df_interest = df.loc[(df[f'time_to_{disease}']>=0) & df['age'].between(50,85), ].copy()
-        df_interest_matched = data_prep.get_matched_cn_data(df_master=df, df_subset=df_interest, disease=disease, time_diff_threshold=1, mode=match_mode)
+        df_interest = df.loc[(df[f'time_to_{disease}']>=0) & df['age'].between(age_range[0],age_range[1]), ].copy()
+        df_interest_matched = data_prep.get_matched_cn_data(df_master=df, df_subset=df_interest, disease=disease, time_diff_threshold=1, mode=match_mode, match_dataset=match_dataset)
         df_interest_matched.to_csv(output_csv, index=False)
     data_prep.visualize_data_points(df, df_interest_matched, png=f'experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/figs/vis_progression_data_points{suffix}.png', disease=disease)
     
@@ -906,4 +918,6 @@ if __name__ == '__main__':
     for bias_correction in options['bias_correction']:
         for disease in options['disease']:
             for match_mode in options['match_mode']:
-                run_experiment(bias_correction, disease, match_mode)
+                for match_dataset in options['match_dataset']:
+                    for age_range in options['age_range']:
+                        run_experiment(bias_correction, disease, match_mode, match_dataset, age_range)
