@@ -646,8 +646,8 @@ def visualize_t_minus_n_prediction_results(df_aucs, dict_windowed_results, png):
     disease = timetoevent_col.replace('time_to_', '')
     
     xlim= [-0.25, df_aucs[timetoevent_col].max()+0.5]
-    ylim = [0.35, 0.85]
-    y_ticks = [0.4, 0.5, 0.6, 0.7, 0.8]
+    ylim = [0.35, 0.85] if disease == 'MCI' else [0.35, 1]
+    y_ticks = [0.4, 0.5, 0.6, 0.7, 0.8] if disease == 'MCI' else [0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
     
     # Upper left block: draw the legend
     ax = fig.add_subplot(gs[:3,0])
