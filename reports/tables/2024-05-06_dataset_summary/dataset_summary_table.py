@@ -11,7 +11,7 @@ def report_dataset_summary(df):
     df['ses'] = df['subj'] + '_' + df['session']
     
     # subset for each row
-    dict_subsets = {dataset: df.loc[df['dataset']==dataset, ] for dataset in df['dataset'].unique()}
+    dict_subsets = {dataset: df.loc[df['dataset']==dataset, ] for dataset in sorted(df['dataset'].unique())}
     dict_subsets['Combined'] = df
     
     for subset_name, subset in dict_subsets.items():
@@ -40,8 +40,8 @@ def report_dataset_summary(df):
         table_data.append([
             subset_name,
             f'{n_subj} ({n_subj_male}/{n_subj_female})',
-            f'{n_subj_cn} CN/{n_subj_mci} MCI/{n_subj_ad} AD',
-            f'{n_ses} ({n_ses_cn} CN/{n_ses_mci} MCI/{n_ses_ad} AD)',
+            f'{n_subj_cn} CN, {n_subj_mci} MCI, {n_subj_ad} AD',
+            f'{n_ses} ({n_ses_cn} CN, {n_ses_mci} MCI, {n_ses_ad} AD)',
             n_scans,
             f'{age_mean:.1f} ± {age_std:.1f}',
             f'{age_min:.1f} - {age_max:.1f}',
