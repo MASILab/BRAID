@@ -252,7 +252,7 @@ class BlandAltman:
             
             # CN*
             ax = fig.add_subplot(gs[row_idx, 2])
-            data = df.loc[df['time_to_MCI']>=cnstar_threshold, ].copy()
+            data = df.loc[df['time_to_MCI']>cnstar_threshold, ].copy()
             age_mask = data['age'].between(45, 90)
             sns.scatterplot(
                 data=data.loc[~age_mask, ], x='age', y=f'age_pred{model_dict["col_suffix"]}_bag',
