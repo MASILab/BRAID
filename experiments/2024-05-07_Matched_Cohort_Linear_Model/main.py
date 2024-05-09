@@ -247,9 +247,9 @@ def visualize_matched_data(df_matched, png):
     # hyperparameters for plotting
     xlim = [57, 96]
     xticks = [60,70,80,90]
-    ylim_hist = [0, 13]
+    ylim_hist = [0, 11]
     ylim_ba = [-9, 8]
-    yticks_hist = [0, 4, 8, 12]
+    yticks_hist = [0, 2, 4, 6, 8, 10]
     yticks_ba = [-8, -6, -4, -2, 0, 2, 4, 6, 8]
     fontsize = 9
     fontfamily = 'DejaVu Sans'
@@ -392,7 +392,7 @@ def visualize_matched_data(df_matched, png):
         fontsize=9, fontfamily='DejaVu Sans',
         transform=ax.transAxes, verticalalignment='top')
     
-    ax.set_xlim(-0.5, 7.5)
+    ax.set_xlim(0, 6)
     ax.invert_xaxis()
     ax.tick_params(axis='x', which='both', direction='out', length=4, pad=2, labelsize=fontsize, labelfontfamily=fontfamily)
     ax.set_xlabel('time to MCI for CN* participants (years)', fontsize=fontsize, fontfamily=fontfamily)
@@ -416,8 +416,7 @@ if __name__ == '__main__':
         df.to_csv(output_fn, index=False)
         
     # Matched categories of data points
-    cnstar_threshold_choices = [(0,10), (1,10), (2,10), 
-        (0,6), (1,6), (2,6), (0,5), (1,5), (2,5), (0,4), (1,4), (2,4)]
+    cnstar_threshold_choices = [(0,6)]
     for t in cnstar_threshold_choices:
         df_matched = get_matched_cohort(df, cnstar_threshold=t, age_diff_threshold=1)
         df_matched.to_csv(f'experiments/2024-05-07_Matched_Cohort_Linear_Model/data/df_matched_cnstar-{t[0]}-{t[1]}.csv', index=False)
