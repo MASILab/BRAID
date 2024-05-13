@@ -212,6 +212,15 @@ class DataPreparation:
                             df.loc[(df['subj']==subj)&(df['age']==rows_subj.iloc[i]['age']), f'age_pred{col_suffix}_{fold_idx}_bag_change_rate'] = (delta_bag / interval) if interval > 0 else None
                         delta_bag = rows_subj.iloc[i+1][f'age_pred{col_suffix}_mean_bag'] - rows_subj.iloc[i][f'age_pred{col_suffix}_mean_bag']
                         df.loc[(df['subj']==subj)&(df['age']==rows_subj.iloc[i]['age']), f'age_pred{col_suffix}_mean_bag_change_rate'] = (delta_bag / interval) if interval > 0 else None
+                        
+        # Impute NaN values with the value from the closest session (if there is any) of the subject
+        cols = [col for col in df.columns if '_bag_change_rate' in col]
+        for subj in df['subj'].unique():
+            ages = sorted(df.loc[df['subj']==subj, 'age'].unique())
+            if len(ages) == 1:
+                continue
+            for col in cols:
+                df.loc[(df['subj']==subj)&(df['age']==ages[-1]), col] = df.loc[(df['subj']==subj)&(df['age']==ages[-2]), col].values[0]
         
         # interactions (chronological age/sex with BAG/BAG change rate)
         for model in self.dict_models.keys():
@@ -749,7 +758,7 @@ def user_input():
         disease_options = ['MCI', 'AD']
         match_mode_options = ['hungry_but_picky']
         match_dataset_options = [False]
-        age_range_options = [(0, 1000), (45, 90)]
+        age_range_options = [(0, 1000)]
         window_size_options = [1, 2]
     else:
         bias_correction_options = [not args.wobc]
