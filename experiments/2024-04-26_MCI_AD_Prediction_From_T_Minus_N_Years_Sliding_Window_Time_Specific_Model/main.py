@@ -33,11 +33,11 @@ def user_input():
 
     if args.run_all_exp:
         bias_correction_options = [True]
-        disease_options = ['MCI', 'AD']
+        disease_options = ['MCI']
         match_mode_options = ['hungry_but_picky']
         match_dataset_options = [False]
         age_range_options = [(0, 1000)]
-        window_size_options = [1, 2]
+        window_size_options = [1]
     else:
         bias_correction_options = [not args.wobc]
         disease_options = [args.disease]
@@ -492,7 +492,7 @@ def visualize_t_minus_n_prediction_results(df_aucs, dict_results, png):
     
     # Upper middle block: y axis label
     ax = fig.add_subplot(gs[:3,1])
-    ax.text(0.2, 0.5, 'Area under the Roc Curve', fontsize=fontsize, fontfamily=fontfamily, ha='center', va='center', rotation='vertical', transform=ax.transAxes)
+    ax.text(0.5, 0.5, 'Area under the Roc Curve', fontsize=fontsize, fontfamily=fontfamily, ha='center', va='center', rotation='vertical', transform=ax.transAxes)
     ax.axis('off')
     
     # Upper right block: draw the AUC plots
@@ -523,12 +523,13 @@ def visualize_t_minus_n_prediction_results(df_aucs, dict_results, png):
 
         ax.set_ylim(bottom=ylim[0], top=ylim[1])
         ax.set_yticks(y_ticks)
+        ax.tick_params(axis='y', which='both', direction='inout', length=4, pad=2, labelsize=fontsize, labelfontfamily=fontfamily)
         ax.invert_xaxis()
         ax.set_ylabel('')
 
     # Bottom middle block: y axis label
     ax = fig.add_subplot(gs[3,1])
-    ax.text(0.2, 0.5, f'Subsets from Sliding Windows', fontsize=fontsize, fontfamily=fontfamily, ha='center', va='center', rotation='vertical', transform=ax.transAxes)
+    ax.text(0.5, 0.5, f'Subsets from Sliding Windows', fontsize=fontsize, fontfamily=fontfamily, ha='center', va='center', rotation='vertical', transform=ax.transAxes)
     ax.axis('off')
     
     # Bottom right: draw time-to-event distribution raincloud plot
@@ -541,13 +542,17 @@ def visualize_t_minus_n_prediction_results(df_aucs, dict_results, png):
     data_subsets = pd.DataFrame(data_subsets)
     
     ax = fig.add_subplot(gs[3,2])
-    sns.violinplot(data=data_subsets, x=timetoevent_col, y='idx', orient='h', color='gray', width=2, linewidth=1, split=True, inner=None, cut=0, density_norm='count', ax=ax)
+    sns.violinplot(data=data_subsets, x=timetoevent_col, y='idx', orient='h', color='gray', width=2, linewidth=1, split=True, inner=None, cut=0, density_norm='count', native_scale=True, ax=ax)
     ax.vlines(x=df_aucs[timetoevent_col].unique(), ymin=0, ymax=1, transform=ax.get_xaxis_transform(), color=(0,0,0), linestyle='-', linewidth=1, alpha=0.1)
     for idx in data_subsets['idx'].unique():
         num = data_subsets.loc[data_subsets['idx']==idx, 'num_pairs'].values[0]
-        ax.text(data_subsets.loc[data_subsets['idx']==idx, timetoevent_col].mean(), idx+1.5, f'{num}', fontsize=fontsize*0.75, fontfamily=fontfamily, ha='center', va='center')
+        ax.text(data_subsets.loc[data_subsets['idx']==idx, timetoevent_col].mean(), idx+1, f'{num}', fontsize=fontsize*0.75, fontfamily=fontfamily, ha='center', va='center')
+    x_ticks = np.arange(0, df_aucs[timetoevent_col].max()+1, 1)
+    ax.set_xticks(x_ticks)
+    ax.tick_params(axis='x', which='both', direction='out', length=4, pad=2, labelsize=fontsize, labelfontfamily=fontfamily)
     ax.set_xlim(left=xlim[0], right=xlim[1])
     ax.invert_xaxis()
+    ax.invert_yaxis()
     ax.set_yticks([])
     ax.set_ylabel('')
     ax.set_xlabel(f"{timetoevent_col.replace('time_to_', 'Time to ')} (years)", fontsize=fontsize, fontfamily=fontfamily)

@@ -755,11 +755,11 @@ def user_input():
 
     if args.run_all_exp:
         bias_correction_options = [True]
-        disease_options = ['MCI', 'AD']
+        disease_options = ['MCI']
         match_mode_options = ['hungry_but_picky']
         match_dataset_options = [False]
         age_range_options = [(0, 1000)]
-        window_size_options = [1, 2]
+        window_size_options = [1]
     else:
         bias_correction_options = [not args.wobc]
         disease_options = [args.disease]
