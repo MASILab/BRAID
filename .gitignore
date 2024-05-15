@@ -6,6 +6,15 @@ models/*/runs
 models/*/sanity_check
 
 # Data
+reports/figures/2024-05-13_MCI_Prediction_From_T_Minus_N_Years_Two_Methods_Merged/figs
+reports/figures/2024-05-13_MCI_Prediction_From_T_Minus_N_Years_Two_Methods_Merged/data
+experiments/2024-04-26_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window_Time_Specific_Model/data
+experiments/2024-04-17_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window/data
+experiments/2024-05-02_Cox_PH_Models/data
+experiments/2024-05-09_Cross_Sectional_CN_MCI_AD_Classification_Matched_Data/data
+experiments/2024-05-07_Matched_Cohort_Linear_Model/data
+reports/figures/2024-05-07_Bland_Altman_selected_models_merged_combined_one_figure/figs
+experiments/2024-03-28_Cross_Sectional_CN_MCI_AD_Classification_Matched_Data/data
 experiments/2024-04-05_MCI_AD_Prediction_From_T_Minus_N_Years/results
 experiments/2024-03-20_Matched_Cohort_Linear_Model/data_matched_cohort.csv
 reports/figures/2024-03-12_Raincloud_plot_Diagnosis_Group_Comparison/figs
