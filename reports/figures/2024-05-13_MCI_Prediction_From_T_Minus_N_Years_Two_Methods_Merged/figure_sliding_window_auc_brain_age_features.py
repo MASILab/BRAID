@@ -8,11 +8,11 @@ import matplotlib.gridspec as gridspec
 import matplotlib.lines as mlines
 
 # Organize and merge results from two experiments
-dict_results_merged = {'Global Model': {}, 'Time-Specific Model': {}}
+dict_results_merged = {'Global Model': {}, 'Time-Specific Models': {}}
 
 # Bootstrapped AUCs
 dict_results_merged['Global Model']['df_aucs'] = pd.read_csv('reports/figures/2024-05-13_MCI_Prediction_From_T_Minus_N_Years_Two_Methods_Merged/data/one_model/prediction_auc_bootstrap_w-bc_MCI_age-0-1000_hungry_but_picky_match-wo-dataset_ws-1.csv')
-dict_results_merged['Time-Specific Model']['df_aucs'] = pd.read_csv('reports/figures/2024-05-13_MCI_Prediction_From_T_Minus_N_Years_Two_Methods_Merged/data/time_specific/prediction_auc_bootstrap_w-bc_age-0-1000_MCI_ws-1_hungry_but_picky_match-wo-dataset.csv')
+dict_results_merged['Time-Specific Models']['df_aucs'] = pd.read_csv('reports/figures/2024-05-13_MCI_Prediction_From_T_Minus_N_Years_Two_Methods_Merged/data/time_specific/prediction_auc_bootstrap_w-bc_age-0-1000_MCI_ws-1_hungry_but_picky_match-wo-dataset.csv')
 
 # Windowed data subsets
 with open('reports/figures/2024-05-13_MCI_Prediction_From_T_Minus_N_Years_Two_Methods_Merged/data/one_model/dict_windowed_results_one_model.pkl', 'rb') as f:
@@ -36,7 +36,7 @@ for idx, subset in dict_results.items():
     data_subsets['time_to_MCI'] += w_results['time_to_MCI'].values.tolist()
     data_subsets['num_pairs'] += [w_results['match_id'].nunique()] * len(w_results.index)
 data_subsets = pd.DataFrame(data_subsets)
-dict_results_merged['Time-Specific Model']['data_subsets'] = data_subsets
+dict_results_merged['Time-Specific Models']['data_subsets'] = data_subsets
 
 # Figure hyperparameters
 fontsize = 9
@@ -101,7 +101,7 @@ ax.text(
 ax.axis('off')
 
 # Middle and right blocks: two methods
-for i, method in enumerate(['Global Model', 'Time-Specific Model']):
+for i, method in enumerate(['Global Model', 'Time-Specific Models']):
     df_aucs = dict_results_merged[method]['df_aucs']
     data_subsets = dict_results_merged[method]['data_subsets']
     xlim= [-0.25, df_aucs['time_to_MCI'].max()+0.5]
