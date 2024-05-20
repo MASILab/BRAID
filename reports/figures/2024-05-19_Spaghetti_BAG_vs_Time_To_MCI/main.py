@@ -1,8 +1,7 @@
 import pandas as pd
 import seaborn as sns
+import statsmodels.formula.api as smf
 import matplotlib.pyplot as plt
-import matplotlib.lines as mlines
-import matplotlib.gridspec as gridspec
 from tqdm import tqdm
 from pathlib import Path
 
@@ -169,43 +168,34 @@ if __name__ == '__main__':
     data_prep = DataPreparation(roster_brain_age_models(), '/nfs/masi/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/databank_dti_v2.csv')
     output_fn = 'reports/figures/2024-05-19_Spaghetti_BAG_vs_Time_To_MCI/data/data.csv'
     if Path(output_fn).is_file():
-        data = pd.read_csv(output_fn)
+        df = pd.read_csv(output_fn)
     else:
         df = data_prep.load_predictions_of_all_models(bias_correction=True)
         df = data_prep.retrieve_diagnosis_label(df)
         df = data_prep.assign_cn_label(df)
         df = data_prep.mark_progression_subjects_out(df)
-
-        data = df.loc[df['time_to_MCI'].notna(), ].copy()
-        for model in data_prep.dict_models.keys():
-            col_bag = f'age_pred{data_prep.dict_models[model]["col_suffix"]}_bag'
-            col_bag_t0 = f'age_pred{data_prep.dict_models[model]["col_suffix"]}_t0'
-            col_bag_relative = f'age_pred{data_prep.dict_models[model]["col_suffix"]}_bag_relative'
-            
-            for subj in data['subj'].unique():
-                data.loc[data['subj']==subj, col_bag_t0] = data.loc[(data['subj']==subj)&(data['time_to_MCI']==0), col_bag].item()
-            data[col_bag_relative] = data[col_bag] - data[col_bag_t0]
-        data.to_csv(output_fn, index=False)
+        df = df.loc[df['time_to_MCI'].notna(), ].copy()
+        df.to_csv(output_fn, index=False)
 
     # Linear mixed-effects models: BAG ~ time_to_mci + time_to_mci^2 + (1|subj)
-    # data = data.loc[data['time_to_MCI'].between(0,10), ]
+    df['time_to_MCI_square'] = df['time_to_MCI'] ** 2
     for model in data_prep.dict_models.keys():
         col_suffix = data_prep.dict_models[model]['col_suffix']
-        col_name = f'age_pred{col_suffix}_bag'
-
-        fig, ax = plt.subplots(1,1,figsize=(3, 4))
+        col_bag = f'age_pred{col_suffix}_bag'
+        
+        lme = smf.mixedlm(f"{col_bag} ~ time_to_MCI + time_to_MCI_square", data=df, groups=df["subj"])
+        result = lme.fit()
+        x = sorted(df['time_to_MCI'].unique())
+        y = [result.fe_params['Intercept'] + result.fe_params['time_to_MCI']*i + result.fe_params['time_to_MCI_square']*i**2 for i in x]
+        
+        fig, ax = plt.subplots(1,1,figsize=(6.5, 5))
         sns.lineplot(
-            data=data, x='time_to_MCI', y=col_name, units='subj', estimator=None, 
+            data=df, x='time_to_MCI', y=col_bag, units='subj', estimator=None, 
             lw=0.5, color='tab:gray', alpha=0.5, linestyle='-', ax=ax
             )
-        sns.regplot(
-            data=data, x='time_to_MCI', y=col_name, units='subj',
-            scatter=False, truncate=False, order=2, color=".2",
-        )
-
-        ax.set_ylim(-10, 10)
-        ax.set_xlim(-1, 14)
-        ax.set_xticks([-6, -4, -2, 0, 2, 4, 6, 8, 10, 12, 14])
+        sns.lineplot(x=x, y=y, color=data_prep.dict_models[model]['style']['color'], lw=2, ax=ax)
+        
+        ax.set_ylim(-20, 20)
         ax.invert_xaxis()
-        fig.savefig(f'reports/figures/2024-05-19_Spaghetti_BAG_vs_Time_To_MCI/figs/{col_name}.png', dpi=300)
+        fig.savefig(f'reports/figures/2024-05-19_Spaghetti_BAG_vs_Time_To_MCI/figs/{col_bag}.png', dpi=300)
         plt.close(fig)
