@@ -7,7 +7,7 @@ from pathlib import Path
 from functions import data
 
 
-def visualize_axial_slices(path_nifti, output_prefix, crop=10, skip_head=60, skip_tail=80, every=2, dpi=300):
+def visualize_axial_slices(path_nifti, output_prefix, crop=10, skip_head=0, skip_tail=0, every=1, dpi=300):
     img = nib.load(path_nifti)
     img = nib.as_closest_canonical(img)
     data = np.squeeze(img.get_fdata())
@@ -58,6 +58,7 @@ if __name__ == '__main__':
 
     for path_nifti in Path(dir).glob('*/*/*.nii.gz'):
         output_prefix = str(path_nifti).replace('/data/', '/figs/').replace('.nii.gz', '')
+        print(output_prefix)
         visualize_axial_slices(path_nifti, output_prefix)
     visualize_axial_slices(path_nifti=Path('/nfs2/ForChenyu/MNI_152.nii.gz'), output_prefix='reports/figures/2024-05-20_Idea_Figure/figs/MNI_152/MNI152')
     visualize_colorbar('reports/figures/2024-05-20_Idea_Figure/figs/colorbar.png')

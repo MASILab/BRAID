@@ -187,7 +187,7 @@ def load_sample_and_symlink_data(dir='reports/figures/2024-05-20_Idea_Figure/dat
             
             # original T1w
             folder_source = path_databank_t1w / row['dataset'] / row['subject'] / row['session'] / 'scan-1'
-            files = list(folder_source.glob('*_T1w.nii.gz'))
+            files = list(folder_source.glob('*_T1w_brain.nii.gz'))
             assert len(files)==1, f"Found {len(files)} *_T1w.nii.gz files in {folder_source}."
             fn_source = files[0]
             fn_target = folder_target / 'T1w_orig.nii.gz'
@@ -201,13 +201,13 @@ def load_sample_and_symlink_data(dir='reports/figures/2024-05-20_Idea_Figure/dat
             fn_target.symlink_to(fn_source)
             
             # original FA/MD images
-            fn_source = path_databank_dti / row['dataset'] / row['subject'] / row['session'] / 'scan-1' / 'dti_fitting' / 'fa.nii.gz'
+            fn_source = path_databank_dti / row['dataset'] / row['subject'] / row['session'] / 'scan-1' / 'dti_fitting' / 'fa_skullstrip.nii.gz'
             if fn_source.is_symlink():
                 fn_source = Path(str(fn_source.readlink()).replace('DTI', 'run-'))
             fn_target = folder_target / 'fa_orig.nii.gz'
             fn_target.symlink_to(fn_source)
             
-            fn_source = path_databank_dti / row['dataset'] / row['subject'] / row['session'] / 'scan-1' / 'dti_fitting' / 'md.nii.gz'
+            fn_source = path_databank_dti / row['dataset'] / row['subject'] / row['session'] / 'scan-1' / 'dti_fitting' / 'md_skullstrip.nii.gz'
             if fn_source.is_symlink():
                 fn_source = Path(str(fn_source.readlink()).replace('DTI', 'run-'))
             fn_target = folder_target / 'md_orig.nii.gz'
