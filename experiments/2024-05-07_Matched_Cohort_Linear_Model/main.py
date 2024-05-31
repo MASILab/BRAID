@@ -328,6 +328,7 @@ def visualize_matched_data(df_matched, png):
             ax=ax)  # rocket_r, PuRd, RdPu
         ax.axhline(y=0, linestyle='-', linewidth=1, color='k', alpha=0.25)
         ax.axhline(y=y_mean, linestyle='-', linewidth=1, color=color_hline_ba)
+        print(f"{cat}: mean={y_mean:.2f}, std={y_std:.2f}")
         ax.axhline(y=y_mean-1.96*y_std, linestyle='--', linewidth=1, color=color_hline_ba)
         ax.axhline(y=y_mean+1.96*y_std, linestyle='--', linewidth=1, color=color_hline_ba)
         ax.set_xlim(xlim[0], xlim[1])

@@ -28,7 +28,7 @@ if __name__ == "__main__":
     
     # Test model from each fold
     for fold_idx in config['model']['fold']:
-        save_output_csv = Path(config['output_dir']) / f'predicted_age_fold-{fold_idx}.csv'
+        save_output_csv = Path(config['output']['dir']) / f"predicted_age_fold-{fold_idx}{config['output']['suffix']}.csv"
         print(f'Start testing model from fold-{fold_idx}.\nOutput will be saved to: {save_output_csv}')
         if save_output_csv.is_file():
             print(f'Output file already exists, skip fold-{fold_idx}.')

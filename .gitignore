@@ -4,8 +4,17 @@ experiments/*/figs
 models/*/predictions
 models/*/runs
 models/*/sanity_check
+models/*/figs
+models/*/weights
 
 # Data
+reports/not_interesting_anymore
+reports/figures/2024-05-20_Idea_Figure/data/
+reports/figures/2024-05-20_Idea_Figure/figs/
+models/2024-02-13_TSAN_second_stage/dataset.xlsx
+models/2024-02-13_TSAN_second_stage/mapping.csv
+reports/figures/2024-05-19_Spaghetti_BAG_vs_Time_To_MCI/figs
+reports/figures/2024-05-19_Spaghetti_BAG_vs_Time_To_MCI/data
 reports/figures/2024-05-13_MCI_Prediction_From_T_Minus_N_Years_Two_Methods_Merged/figs
 reports/figures/2024-05-13_MCI_Prediction_From_T_Minus_N_Years_Two_Methods_Merged/data
 experiments/2024-04-26_MCI_AD_Prediction_From_T_Minus_N_Years_Sliding_Window_Time_Specific_Model/data

@@ -100,25 +100,25 @@ def symlink(tuple):
 if __name__ == "__main__":
     
     databank_dti = Path('/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/databank_dti')
-    suffix = '_skullstrip_MNI152_warped.nii.gz'
+    suffix = '_skullstrip_MNI152.nii.gz'
     num_workers = 4
     
-    # # Crop and downsample the FA and MD images
-    # for dataset_dir in databank_dti.iterdir():
-    #     if not dataset_dir.is_dir():
-    #         continue
+    # Crop and downsample the FA and MD images
+    for dataset_dir in databank_dti.iterdir():
+        if not dataset_dir.is_dir():
+            continue
 
-    #     list_t1w = find_files(root_dir=dataset_dir, suffix=suffix)
-    #     dataset = Preprocessing_Dataset(list_t1w=list_t1w, data_root_dir=dataset_dir)
-    #     dataloader = DataLoader(dataset=dataset, batch_size=num_workers, shuffle=False, 
-    #                             num_workers=num_workers, pin_memory = False, prefetch_factor=None)
+        list_t1w = find_files(root_dir=dataset_dir, suffix=suffix)
+        dataset = Preprocessing_Dataset(list_t1w=list_t1w, data_root_dir=dataset_dir)
+        dataloader = DataLoader(dataset=dataset, batch_size=num_workers, shuffle=False, 
+                                num_workers=num_workers, pin_memory = False, prefetch_factor=None)
 
-    #     for _ in tqdm(dataloader, total=len(dataloader), desc=f'Crop and downsample FA/MD from {dataset_dir.name}'):
-    #         passq
+        for _ in tqdm(dataloader, total=len(dataloader), desc=f'Crop and downsample FA/MD from {dataset_dir.name}'):
+            pass
 
     # Symlink final FA and MD we need to braid_dataset
-    braid_dataset = Path('/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/braid_dataset_ss_affine_warp_crop_downsample')
-    suffix = '_skullstrip_MNI152_warped_crop_downsample.nii.gz'
+    braid_dataset = Path('/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/braid_dataset_ss_affine_crop_downsample')
+    suffix = '_skullstrip_MNI152_crop_downsample.nii.gz'
     train_csv = '/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/braid_train.csv'
     test_csv = '/home/gaoc11/GDPR/masi/gaoc11/BRAID/data/dataset_splitting/spreadsheet/braid_test.csv'
     

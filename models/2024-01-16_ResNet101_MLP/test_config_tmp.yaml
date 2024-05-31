@@ -9,7 +9,7 @@ model:
   
 dataset:
   root: '/tmp/.GoneAfterReboot/braid_dataset_ss_affine_crop_downsample'
-  csv_file: '/tmp/.GoneAfterReboot/spreadsheet/braid_train.csv'
+  csv_file: '/tmp/.GoneAfterReboot/spreadsheet/braid_test.csv'
   age_min: 0
   age_max: 999
 
@@ -17,4 +17,4 @@ batch_size: 8
 
 output:
   dir: '/nfs/masi/gaoc11/projects/BRAID/models/2024-01-16_ResNet101_MLP/predictions/'
-  suffix: '_trainval'
+  suffix: '_test'

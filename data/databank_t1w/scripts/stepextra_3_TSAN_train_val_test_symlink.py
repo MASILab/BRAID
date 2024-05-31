@@ -52,7 +52,7 @@ def organize_train_val_test_set(
         sex_tsan = 1 if sex == 'male' else 0 if sex == 'female' else None
         
         d_tsan_excel['t1w'].append(fn_tsan)
-        d_tsan_excel['age'].append(None)
+        d_tsan_excel['age'].append(0.1)  # Hide the testing label
         d_tsan_excel['sex'].append(sex_tsan)
 
         tsan_img_id += 1

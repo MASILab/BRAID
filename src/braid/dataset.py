@@ -250,8 +250,8 @@ class BRAID_Dataset(Dataset):
     def __getitem__(self, idx):
         row = self.df.loc[self.df['scan_id']==self.list_scans[idx], ].iloc[0]
 
-        fa = self.dataset_root / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'fa_skullstrip_MNI152_warped_crop_downsample.nii.gz'
-        md = self.dataset_root / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'md_skullstrip_MNI152_warped_crop_downsample.nii.gz'
+        fa = self.dataset_root / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'fa_skullstrip_MNI152_crop_downsample.nii.gz'
+        md = self.dataset_root / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / 'md_skullstrip_MNI152_crop_downsample.nii.gz'
         data_dict = {'fa': fa, 'md': md}
         data_dict = self.transform(data_dict)
         images = data_dict['images']

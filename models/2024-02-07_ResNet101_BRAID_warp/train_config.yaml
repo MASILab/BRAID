@@ -1,0 +1,36 @@
+modality: 'DTI'
+mode: 'train'
+
+model:
+  name: 'resnet101'
+  mlp_hidden_layer_sizes: []
+  fold: [1,2,3,4,5]
+  feature_vector_length: 6
+  n_input_channels: 2
+
+dataset:
+  root: '/tmp/.GoneAfterReboot/braid_dataset_ss_affine_warp_crop_downsample'
+  csv_file: '/tmp/.GoneAfterReboot/spreadsheet/braid_train.csv'
+  cv_subjects_dir: '/tmp/.GoneAfterReboot/cross_validation/'
+  age_min: 45
+  age_max: 90
+
+optimization:
+  epochs: 45
+  batch_size: 4
+  batch_size_mimic_factor: 1
+  loss: 'MSELoss'
+  optimizer:
+    name: 'Adam'
+    lr: !!float 1e-3 
+  lr_scheduler:
+    name: 'OneCycleLR'
+    lr_max: !!float 1e-3
+    cycle_momentum: True
+
+output:
+  weights_local_dir: '/home-local/gaoc11/models/2024-02-07_ResNet101_BRAID_warp/weights/'
+  weights_server_dir: '/nfs/masi/gaoc11/projects/BRAID/models/2024-02-07_ResNet101_BRAID_warp/weights/'
+  tensorboard: '/nfs/masi/gaoc11/projects/BRAID/models/2024-02-07_ResNet101_BRAID_warp/runs/'
+  png_sanity_check: '/nfs/masi/gaoc11/projects/BRAID/models/2024-02-07_ResNet101_BRAID_warp/sanity_check/'
+

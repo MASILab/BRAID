@@ -1,0 +1,20 @@
+modality: 'T1w'
+model:
+  name: 'resnet101'
+  mlp_hidden_layer_sizes: []
+  feature_vector_length: 6
+  fold: [1,2,3,4,5]
+  n_input_channels: 1
+  weights_root: '/nfs/masi/gaoc11/projects/BRAID/models/2024-02-07_T1wAge_ResNet101/weights'
+  
+dataset:
+  root: '/tmp/.GoneAfterReboot/T1wAgePredict'
+  csv_file: '/tmp/.GoneAfterReboot/spreadsheet/t1wagepredict_train.csv'
+  age_min: 0
+  age_max: 999
+
+batch_size: 8
+
+output:
+  dir: '/nfs/masi/gaoc11/projects/BRAID/models/2024-02-07_T1wAge_ResNet101/predictions/'
+  suffix: '_trainval'

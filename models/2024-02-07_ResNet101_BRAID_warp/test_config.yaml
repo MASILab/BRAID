@@ -5,10 +5,10 @@ model:
   feature_vector_length: 6
   fold: [1,2,3,4,5]
   n_input_channels: 2
-  weights_root: '/nfs/masi/gaoc11/projects/BRAID/models/2023-12-22_ResNet101/weights/'
+  weights_root: '/nfs/masi/gaoc11/projects/BRAID/models/2024-02-07_ResNet101_BRAID_warp/weights'
   
 dataset:
-  root: '/tmp/.GoneAfterReboot/braid_dataset_ss_affine_crop_downsample'
+  root: '/tmp/.GoneAfterReboot/braid_dataset_ss_affine_warp_crop_downsample'
   csv_file: '/tmp/.GoneAfterReboot/spreadsheet/braid_train.csv'
   age_min: 0
   age_max: 999
@@ -16,5 +16,5 @@ dataset:
 batch_size: 8
 
 output:
-  dir: '/nfs/masi/gaoc11/projects/BRAID/models/2023-12-22_ResNet101/predictions/'
+  dir: '/nfs/masi/gaoc11/projects/BRAID/models/2024-02-07_ResNet101_BRAID_warp/predictions/'
   suffix: '_trainval'

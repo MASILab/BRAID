@@ -67,12 +67,23 @@ feat_vis_order = [
     'basic + GM age (TSAN)', 'basic + GM age (DeepBrainNet)', 'basic + GM age (ours)',
     'basic + WM age affine', 'basic + WM age nonlinear',
 ]
+dict_feat_combos_rename = {
+    'basic: chronological age + sex': 'basic: chronological age + sex',
+    'basic + WM age nonlinear': 'basic + WM age nonrigid',
+    'basic + WM age affine': 'basic + WM age affine',
+    'basic + GM age (ours)': 'basic + GM age (ours)',
+    'basic + GM age (DeepBrainNet)': 'basic + GM age (DBN)',
+    'basic + GM age (TSAN)': 'basic + GM age (TSAN)',
+    'basic + WM age nonlinear + GM age (ours)': 'basic + WM age nonrigid + GM age (ours)',
+    'basic + WM age nonlinear + GM age (DeepBrainNet)': 'basic + WM age nonrigid + GM age (DBN)',
+    'basic + WM age nonlinear + GM age (TSAN)': 'basic + WM age nonrigid + GM age (TSAN)',
+}
 
 # Bottom block: legends
 ax = fig.add_subplot(gs[5,:])
 lines = []
 for feat_combo in dict_feat_combos.keys():
-    label_txt = textwrap.fill(feat_combo, width=25)
+    label_txt = textwrap.fill(dict_feat_combos_rename[feat_combo], width=25)
     
     line = mlines.Line2D(
         [], [], color=dict_feat_combos[feat_combo]['color'], alpha=dict_feat_combos[feat_combo]['alpha'], 
