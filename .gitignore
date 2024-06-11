@@ -8,6 +8,9 @@ models/*/figs
 models/*/weights
 
 # Data
+experiments/2024-06-06_VMAP_Model_Inference/**/*.csv
+data/subject_info/raw/VMAP_2024-05_update/*.csv
+data/subject_info/raw/VMAP_2024-05_update/*.tsv
 reports/not_interesting_anymore
 reports/figures/2024-05-20_Idea_Figure/data/
 reports/figures/2024-05-20_Idea_Figure/figs/

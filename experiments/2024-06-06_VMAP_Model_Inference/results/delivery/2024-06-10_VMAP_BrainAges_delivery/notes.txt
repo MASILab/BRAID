@@ -1,0 +1,18 @@
+Columns:
+- bids_subject_id: subject ID in BIDS format
+- bids_session_id: session ID in BIDS format
+- bids_acquisition_label: acquisition label of the scan in BIDS format
+- bids_run_label: run label of the scan in BIDS format
+- xnat_project: Which XNAT project contains imaging data. The information is copied from the spreadsheet provided by VMAP.
+- vmac_id: VMAC ID. The information is copied from the spreadsheet provided by VMAP.
+- session_id: Scan session ID. The information is copied from the spreadsheet provided by VMAP.
+- age_chronological: chronological age (years).
+- age_pred_dbn: estimated brain age by DeepBrainNet (years).
+- age_pred_dbn_bc: estimated brain age by DeepBrainNet (years), after bias correction.
+- age_pred_wm_age_affine: estimated brain age (years) by WM age affine, described in the BRAID paper.
+- age_pred_wm_age_affine_bc: estimated brain age (years) by WM age affine, described in the BRAID paper, after bias correction.
+- age_pred_wm_age_nonrigid: estimated brain age (years) by WM age nonrigid, described in the BRAID paper.
+- age_pred_wm_age_nonrigid_bc: estimated brain age (years) by WM age nonrigid, described in the BRAID paper, after bias correction.
+
+Others:
+- fold-*: WM age nonrigid and WM age affine were trained with 5-fold cross validation. Therefore, we have five trained models for each.

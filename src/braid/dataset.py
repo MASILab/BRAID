@@ -162,7 +162,7 @@ def get_the_sequence_of_scans(
     
     # load and check the dataframe
     df = pd.read_csv(csv_file)
-    columns_to_check = ['dataset', 'subject', 'session', 'scan', 'sex', 'race_simple', 'age', 'control_label', 'dataset_subject']
+    columns_to_check = ['dataset', 'subject', 'session', 'scan', 'sex', 'race_simple', 'age', 'dataset_subject']
     for col in columns_to_check:
         if col not in df.columns: raise ValueError(f"Column '{col}' not found in csv file")
     

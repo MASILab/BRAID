@@ -1,4 +1,5 @@
 import re
+import json
 import pandas as pd
 import numpy as np
 import statsmodels.api as sm
@@ -53,6 +54,11 @@ class BiasCorrection:
         slope = results.params['age']
         intercept = results.params['const']
         
+        stored_params = {'slope': slope, 'intercept': intercept}
+        save_json = csv_trainval.replace('predicted_age', 'bias_cor_params').replace('_trainval.csv', '.json')
+        with open(save_json, 'w') as f:
+            json.dump(stored_params, f)
+        
         return slope, intercept
         
         
@@ -68,8 +74,8 @@ class BiasCorrection:
         for csv_trainval, csv_test in zip(dict_prediction_csv['trainval'], dict_prediction_csv['test']):
             slope, intercept = self.get_bc_params(csv_trainval)
             df_bc = self.apply_bc(slope, intercept, csv_test)
-            df_bc.to_csv(csv_test.replace('.csv', suffix), index=False)
-            print(f"Bias correction applied to {csv_test}")
+            # df_bc.to_csv(csv_test.replace('.csv', suffix), index=False)
+            # print(f"Bias correction applied to {csv_test}")
             
 
 if __name__ == "__main__":

@@ -1,0 +1,20 @@
+modality: 'DTI'
+model:
+  name: 'resnet101'
+  mlp_hidden_layer_sizes: []
+  feature_vector_length: 6
+  fold: [1,2,3,4,5]
+  n_input_channels: 2
+  weights_root: '/nfs/masi/gaoc11/projects/BRAID/models/2024-02-07_ResNet101_BRAID_warp/weights'
+  
+dataset:
+  root: '/home-local/gaoc11/VMAP_Brain_Age/WMage_nonrigid'
+  csv_file: '/nfs/masi/gaoc11/projects/BRAID/experiments/2024-06-06_VMAP_Model_Inference/vmap_braid_style.csv'
+  age_min: 0
+  age_max: 999
+
+batch_size: 8
+
+output:
+  dir: '/nfs/masi/gaoc11/projects/BRAID/experiments/2024-06-06_VMAP_Model_Inference/results/WMage_nonrigid_predictions/'
+  suffix: '_WMage_nonrigid'
