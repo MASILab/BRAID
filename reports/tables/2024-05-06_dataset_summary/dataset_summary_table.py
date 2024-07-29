@@ -1,10 +1,11 @@
+import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from tabulate import tabulate
 
 def report_dataset_summary(df):
     header = ['study', 'n participants (male/female)', 'n participants control and disease',
-              'n sessions control and disease', 'n scans', 'age mean ± std', 'age range']
+              'n sessions control and disease', 'follow-up interval', 'n scans', 'age mean ± std', 'age range']
     table_data = []
     
     df['subj'] = df['dataset'] + '_' + df['subject']
@@ -30,6 +31,19 @@ def report_dataset_summary(df):
         n_ses_mci = subset.loc[subset['diagnosis']=='MCI', 'ses'].nunique()
         n_ses_ad = subset.loc[subset['diagnosis']=='AD', 'ses'].nunique()
         
+        # follow-up interval
+        if n_subj == n_ses:  # no longitudinal session
+            interval_mean = None
+            interval_std = None
+        else:
+            intervals = []
+            for subj in subset['subj'].unique():
+                ages = sorted(subset.loc[subset['subj']==subj, 'age'].unique())
+                for i in range(len(ages)-1):
+                    intervals.append(ages[i+1] - ages[i])
+            interval_mean = np.mean(intervals)
+            interval_std = np.std(intervals)
+
         n_scans = subset.shape[0]
         
         age_mean = subset['age'].mean()
@@ -42,6 +56,7 @@ def report_dataset_summary(df):
             f'{n_subj} ({n_subj_male}/{n_subj_female})',
             f'{n_subj_cn} CN, {n_subj_mci} MCI, {n_subj_ad} AD',
             f'{n_ses} ({n_ses_cn} CN, {n_ses_mci} MCI, {n_ses_ad} AD)',
+            f'{interval_mean:.1f} ± {interval_std:.1f}' if interval_mean is not None else None,
             n_scans,
             f'{age_mean:.1f} ± {age_std:.1f}',
             f'{age_min:.1f} - {age_max:.1f}',
