@@ -1,5 +1,4 @@
 import pdb
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -299,8 +298,7 @@ def make_quiver_plot(df, x_col_name, y_col_name, u_col_name, v_col_name, png):
         )
     
     ax.set_aspect('equal')
-    # ax.set_xlim(-15, 20)
-    # ax.set_ylim(-15, 20)
+
     # Add legend
     for category, color in color_dict.items():
         ax.scatter([], [], c=color, label=category)
@@ -310,6 +308,21 @@ def make_quiver_plot(df, x_col_name, y_col_name, u_col_name, v_col_name, png):
     ax.set_xlabel(dict_axis_labels[x_col_name], fontsize=9, fontname='DejaVu Sans')
     ax.set_ylabel(dict_axis_labels[y_col_name], fontsize=9, fontname='DejaVu Sans')
     fig.savefig(png, dpi=300)
+    
+    fig, ax = plt.subplots(figsize=(6.5, 6.5))
+    for category, color in color_dict.items():
+        ax.scatter(
+            x = df.loc[df['category']==category, x_col_name].to_numpy(dtype='float16'), 
+            y = df.loc[df['category']==category, y_col_name].to_numpy(dtype='float16'), 
+            s = 2,
+            c = color,
+            label=category,
+            alpha=0.75)    
+    ax.legend(title='Category')
+    ax.set_aspect('equal')
+    ax.set_xlabel(dict_axis_labels[x_col_name], fontsize=9, fontname='DejaVu Sans')
+    ax.set_ylabel(dict_axis_labels[y_col_name], fontsize=9, fontname='DejaVu Sans')
+    fig.savefig(png.replace('.png', '_scatter.png'), dpi=300)
     plt.close('all')
 
 
@@ -327,23 +340,32 @@ if __name__ == '__main__':
         df = data_prep.mark_progression_subjects_out(df)
         df = data_prep.assign_category_label(df)
         df.to_csv(output_fn, index=False)
-
-    df = df.loc[df['age_pred_wm_age_nonlinear_bag_change_rate'].notna(), ].copy()
     
-    for age_range in [[45, 90], 
-                      [45, 75], [50, 80], [55, 85], [60, 90],
-                      [55, 75], [65, 85], [75, 90],
-                      [45, 60], [55, 70], [65, 80], [75, 90]]:
-        df_filtered = df.loc[df['age'].between(age_range[0], age_range[1]), ].copy()
-        try:
-            df_matched = get_matched_cohort(df_filtered, age_diff_threshold=1)
-        except:
-            continue
+    # filter out NaN and outliers
+    for x, y in [('age_pred_gm_age_ours_bag', 'age_pred_wm_age_nonlinear_bag'),
+                 ('age_pred_gm_age_ours_bag', 'age_pred_wm_age_affine_bag'),
+                 ('age_pred_gm_age_dbn_bag', 'age_pred_wm_age_nonlinear_bag'),
+                 ('age_pred_gm_age_dbn_bag', 'age_pred_wm_age_affine_bag')]:
         
-        for x,y in [('age_pred_gm_age_ours_bag', 'age_pred_wm_age_nonlinear_bag'),
-                    ('age_pred_gm_age_ours_bag', 'age_pred_wm_age_affine_bag'),
-                    ('age_pred_gm_age_dbn_bag', 'age_pred_wm_age_nonlinear_bag'),
-                    ('age_pred_gm_age_dbn_bag', 'age_pred_wm_age_affine_bag')]:
+        data = df.copy()
+        x_cr, y_cr = x.replace('_bag', '_bag_change_rate'), y.replace('_bag', '_bag_change_rate')
+        
+        for col in [x_cr, y_cr]:
+            for cat in data['category'].unique():
+                q1 = data.loc[data['category']==cat, col].quantile(0.25)
+                q3 = data.loc[data['category']==cat, col].quantile(0.75)
+                iqr = q3 - q1
+                lower_bound = q1 - 1.5 * iqr
+                upper_bound = q3 + 1.5 * iqr
+                
+                outlier_indices = data.loc[(data['category']==cat) & ((data[col] < lower_bound) | (data[col] > upper_bound))].index
+                data = data.drop(outlier_indices)
+                
+        for age_range in [[45, 90], [45, 75], [50, 80], [55, 85], [60, 90], [55, 75], [65, 85], [75, 90], [45, 60], [55, 70], [65, 80], [75, 90]]:
+            data_filtered = data.loc[data['age'].between(age_range[0], age_range[1]), ].copy()
+            try:
+                data_matched = get_matched_cohort(data_filtered, age_diff_threshold=1)
+            except:
+                continue
             
-            x_c, y_c = x.replace('_bag', '_bag_change_rate'), y.replace('_bag', '_bag_change_rate')
-            make_quiver_plot(df_matched, x, y, x_c, y_c, f'reports/figures/2024-07-30_Quiver_plot_wm_gm_bag/figs/{age_range[0]}-{age_range[1]}_{x}_vs_{y}.png')
+            make_quiver_plot(data_matched, x, y, x_cr, y_cr, f'reports/figures/2024-07-30_Quiver_plot_wm_gm_bag/figs/{age_range[0]}-{age_range[1]}_{x}_{y}.png')
