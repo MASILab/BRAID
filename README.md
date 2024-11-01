@@ -1,11 +1,16 @@
-# <img src="figures/logo.PNG" alt="braid_logo" width="250"/> BRAID: Brain Age Identification from Diffusion MRI
+<p align="center">
+    <img src="figures/logo.PNG" alt="braid" width="300">
+</p>
 
+# BRAID: Brain Age Identification from Diffusion MRI
 
-
+BRAID predicts brain age from diffusion MRI. Unlike its counterparts, which typically use anatomical features (volume, shape, etc.) to assist in the prediction, BRAID deliberately destroys anatomical information through non-rigid transformations. By minimizing anatomical information, BRAID can better focus on subtle microstructural changes that predate apparent anatomical changes in neurodegeneration. The goal of BRAID is not to be a perfect chronological age predictor, but to provide an earlier biomarker for neurodegenerative disease prediction.
 
 <div align="center">
     <img src="figures/warp_brain.png" alt="warp brain" width="650"/>
 </div>
+
+Illustration of the preprocessing, which minimizes anatomical information through non-rigid transformations.
 
 <div align="center">
     <img src="figures/preprocessing.png" alt="preprocessing" width="650"/>
@@ -43,3 +48,4 @@
     }
     ```
 
+## Using the code:
