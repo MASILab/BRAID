@@ -1,4 +1,7 @@
-# BRAID: Brain Age Identification from Diffusion MRI <img src="figures/logo.PNG" alt="braid_logo" width="200"/>
+# <img src="figures/logo.PNG" alt="braid_logo" width="250"/> BRAID: Brain Age Identification from Diffusion MRI
+
+
+
 
 <div align="center">
     <img src="figures/warp_brain.png" alt="warp brain" width="650"/>
