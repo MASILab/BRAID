@@ -1,3 +1,6 @@
+reports/figures/2024-07-30_Quiver_plot_wm_gm_bag/figs
+reports/figures/2024-07-30_Quiver_plot_wm_gm_bag/data
+
 experiments/*/figs
 
 *.pth
