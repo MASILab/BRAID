@@ -49,3 +49,25 @@ Illustration of the preprocessing, which minimizes anatomical information throug
     ```
 
 ## Using the code:
+*The documentation of this section and the refinement of corresponding scripts are still in-progress. Some "run it with one command" features might not work as promised. Please submit issues if you encounter such cases.*
+
+### 1. Installation and pretrained weights
+#### 1.1 Clone the repository
+```bash
+git clone https://github.com/MASILab/BRAID.git
+```
+#### 1.2 Create a virtual environment (optional, recommended)
+
+Install python 
+> Note: This package was developed using Python 3.11.5. For the best experience and minimal setup, Python 3.11 or later is recommended.
+
+```bash
+cd BRAID
+python -m venv env
+source env/bin/activate
+```
+
+#### 1.3 Install dependencies
+```bash
+pip install ./
+```
