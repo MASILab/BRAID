@@ -5,6 +5,17 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "braid"
 version = "1.0.0"
+description = "Brain Age Identification from Diffusion MRI."
+authors = [
+    {name = "Chenyu Gao", email = "chenyu.gao@vanderbilt.edu"}
+]
 dependencies = [
-
+    "monai==1.3.0",
+    "nibabel==5.1.0",
+    "numpy==1.26.2",
+    "pandas==2.1.3",
+    "PyYAML==6.0.1",
+    "tensorboard==2.15.1",
+    "torch==2.1.1",
+    "tqdm==4.66.1",
 ]

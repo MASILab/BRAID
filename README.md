@@ -15,7 +15,10 @@ This work is licensed under a
 [cc-by-nc-image]: https://licensebuttons.net/l/by-nc/4.0/88x31.png
 [cc-by-nc-shield]: https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg
 
-BRAID predicts brain age from diffusion MRI. Unlike its counterparts, which typically use anatomical features (volume, shape, etc.) to assist in the prediction, BRAID deliberately destroys anatomical information through non-rigid transformations. By minimizing anatomical information, BRAID can better focus on subtle microstructural changes that predate apparent anatomical changes in neurodegeneration. The goal of BRAID is not to be a perfect chronological age predictor, but to provide an earlier biomarker for neurodegenerative disease prediction.
+BRAID predicts brain age from diffusion MRI. 
+Unlike its counterparts, which typically use anatomical features (volume, shape, etc.) to assist in the prediction, BRAID deliberately destroys anatomical information.
+Through non-rigid transformations, BRAID minimizes anatomical information to better focus on subtle microstructural changes that predate apparent anatomical changes in neurodegeneration. 
+The goal of BRAID is not to be a perfect chronological age predictor, but to provide an earlier biomarker for neurodegenerative disease prediction.
 
 <div align="center">
     <img src="figures/warp_brain.png" alt="warp brain" width="650"/>
@@ -82,3 +85,4 @@ source env/bin/activate
 ```bash
 pip install ./
 ```
+
