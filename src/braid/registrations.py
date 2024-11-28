@@ -6,7 +6,7 @@ from pathlib import Path
 
 def register_b0_to_MNI152(path_b0, path_t1, path_t1_brain, path_MNI152, outdir):
     """ 
-    First, use epi_reg to register b0 to T1w. Then, affine register T1w to standard template MNI152.
+    First, use epi_reg to register b0 to T1w. Then, non-rigidly (affine + syn) register T1w to standard template MNI152.
     """
 
     temp_folder = Path(outdir) / 'temp'  # store tempory intermidiate files
@@ -33,19 +33,22 @@ def register_b0_to_MNI152(path_b0, path_t1, path_t1_brain, path_MNI152, outdir):
     subprocess.run(command)
 
     # transformation from T1w to standard template (rigid + affine)
-    t1_to_template_affine = temp_folder / 't1_to_MNI1520GenericAffine.mat'
-    t1_to_template_prefix = str(t1_to_template_affine).replace('0GenericAffine.mat', '')
-    command = ['antsRegistrationSyN.sh', '-d', '3', '-f', str(path_MNI152), '-m', str(path_t1), '-o', t1_to_template_prefix, '-t', 'a']
+    t1_to_template_prefix = str(temp_folder / 'transform_t1toMNI152_')
+    t1_to_template_affine = temp_folder / 'transform_t1toMNI152_0GenericAffine.mat'
+    t1_to_template_warp = temp_folder / 'transform_t1toMNI152_1Warp.nii.gz'
+    command = ['antsRegistrationSyN.sh', '-d', '3', '-f', str(path_MNI152), '-m', str(path_t1), '-o', t1_to_template_prefix, '-t', 's']
     subprocess.run(command)
 
     # copy selected files to output folder
     b0_to_t1_ants_copy_to = Path(outdir) / 'transform_b0tot1.txt'
     t1_to_b0_ants_copy_to = Path(outdir) / 'transform_t1tob0.txt'
     t1_to_template_affine_copy_to = Path(outdir) / 'transform_t1toMNI_affine.mat'
+    t1_to_template_warp_copy_to = Path(outdir) / 'transform_t1toMNI_warp.nii.gz'
 
     subprocess.run(['cp', str(b0_to_t1_ants), str(b0_to_t1_ants_copy_to)])
     subprocess.run(['cp', str(t1_to_b0_ants), str(t1_to_b0_ants_copy_to)])
     subprocess.run(['cp', str(t1_to_template_affine), str(t1_to_template_affine_copy_to)])
+    subprocess.run(['cp', str(t1_to_template_warp), str(t1_to_template_warp_copy_to)])
 
     print('Finished all registrations. Cleaning up temp folder: {}'.format(temp_folder))
     subprocess.run(['rm', '-r', str(temp_folder)])
