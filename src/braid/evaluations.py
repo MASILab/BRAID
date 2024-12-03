@@ -9,24 +9,47 @@ import statsmodels.formula.api as smf
 from pathlib import Path, PosixPath
 from braid.models import get_the_resnet_model
 
-
-def load_trained_model(model_name, mlp_hidden_layer_sizes, feature_vector_length, n_input_channels, path_pth, device='cuda'):
-    # model architecture
+def load_trained_model(model_name, mlp_hidden_layer_sizes, feature_vector_length, n_input_channels, path_pth, device=None):
+    """
+    Load a trained model with specified parameters and weights.
+    
+    Args:
+        model_name (str): The name of the ResNet model to use, e.g. 'resnet101'.
+        mlp_hidden_layer_sizes (list[int]): List of hidden layer sizes for the MLP.
+        feature_vector_length (int): The length of the feature vector.
+        n_input_channels (int): Number of input channels for the model.
+        path_pth (str): Path to the `.pth` file containing model weights.
+        device (str | torch.device | None): Device to load the model on ('cpu', 'cuda', or torch.device).
+    
+    Returns:
+        torch.nn.Module: The loaded and initialized model.
+    """
+    if device is None:
+        device = torch.device('cpu')
+    elif isinstance(device, str):
+        device = torch.device(device)
+    elif not isinstance(device, torch.device):
+        raise ValueError(f"{device} not supported. Use None, 'cpu', 'cuda', 'cuda:1', torch.device, etc.")
+    
+    # model configuration
     model = get_the_resnet_model(
         model_name = model_name,
         feature_vector_length = feature_vector_length,
         MLP_hidden_layer_sizes = mlp_hidden_layer_sizes,
         n_input_channels = n_input_channels,
     )
+    model = model.to(device)
     
     # load model weights
-    checkpoint = torch.load(path_pth)
-    model.load_state_dict(checkpoint)
-    
-    if device == 'cuda':
-        model = model.to(torch.device('cuda'))
-    
-    print(f"Trained model loaded in {device}")
+    if not Path(path_pth).is_file():
+        raise FileNotFoundError(f"Checkpoint file not found at: {path_pth}")
+    try:
+        checkpoint = torch.load(path_pth, map_location=device)
+        model.load_state_dict(checkpoint)
+    except:
+        raise ValueError(f"Error loading checkpoint file: {path_pth}")
+        
+    print(f"Trained model loaded on {device}")
     return model
 
 
