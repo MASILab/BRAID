@@ -1,13 +1,36 @@
 # Date: Nov 26, 2024
 
+import yaml
+import json
+import torch
 import argparse
-import subprocess
 import numpy as np
 import pandas as pd
 import nibabel as nib
-from pathlib import Path
-import braid.registrations
 import braid.calculate_dti_scalars
+import braid.utls
+import braid.evaluations
+import braid.registrations
+from pathlib import Path
+from monai.transforms import (
+    Compose,
+    LoadImage,
+    LoadImaged,
+    EnsureChannelFirst,
+    EnsureChannelFirstd,
+    Orientation,
+    Orientationd,
+    CenterSpatialCrop,
+    CenterSpatialCropd,
+    Spacing,
+    Spacingd,
+    ToTensor,
+    ToTensord,
+    ConcatItemsd,
+    NormalizeIntensity
+)
+torch.set_flush_denormal(True)
+
 
 def convert_to_brain_mask(path_input, path_output, background=0):
     """Convert the segmentation image to a binary brain mask.
@@ -18,21 +41,94 @@ def convert_to_brain_mask(path_input, path_output, background=0):
     """
     img = nib.load(path_input)
     data = img.get_fdata()
-    brain_mask = (data != background).astype(int)
+    brain_mask = (data != background).astype("uint8")
     nib.save(nib.Nifti1Image(brain_mask, img.affine), path_output)
 
-def apply_skull_strip_mask(path_input, path_mask, path_output):
-    """Apply a binary brain mask to an input image. The input and the mask should be in the same space.
-    We assume the binary mask is 0 for background, and 1 for brain, and there is no other value in the mask.
+
+def vectorize_label(label_name, label_value):
+    
+    if label_name == 'sex':
+        lut = {
+            0: [1, 0],
+            1: [0, 1],
+        }
+        if label_value in lut.keys():
+            return lut[label_value]
+        else:
+            return [0.5, 0.5]
+
+    elif label_name == 'race':
+        lut = {
+            1: [1, 0, 0, 0], 
+            2: [0, 1, 0, 0], 
+            3: [0, 0, 1, 0],
+            4: [0, 0, 0, 1],
+            0: [0.25, 0.25, 0.25, 0.25],
+        }
+        if label_value in lut.keys():
+            return lut[label_value]
+        else:
+            return [0.25, 0.25, 0.25, 0.25]
+    
+    else:
+        raise ValueError(f'Unknown label name: {label_name}')
+
+
+def load_braid_sample(modality, path_fa=None, path_md=None, path_t1=None, sex=None, race=None):
+    """Load and preprocess a single sample.
 
     Args:
-        path_input (str): Path to the input image
-        path_mask (str): Path to the brain mask
-        path_output (str): Path to save the output image
+        modality (str): Modality of the input image(s). It can be 'DTI' or 'T1w'.
+        path_fa (str | PosixPath): Path to the FA image in the MNI152 space.
+        path_md (str | PosixPath): Path to the MD image in the MNI152 space.
+        path_t1 (str | PosixPath): Path to the T1w image in the MNI152 space.
+        sex (int): sex provided by user.
+        race (int): race provided by user.
+
+    Returns:
+        torch.Tensor: A tensor of shape (1, C, D, H, W) containing the image(s) with a batch dimension.
+        torch.Tensor: A tensor of shape (1, 6) containing the label feature vector with a batch dimension.    
     """
     
-    command = ['fslmaths', str(path_input), '-mul', str(path_mask), str(path_output)]
-    subprocess.run(command)
+    if modality == 'DTI':
+        transform = Compose([
+            LoadImaged(keys=['fa', 'md'], image_only=False),
+            EnsureChannelFirstd(keys=['fa', 'md']),
+            Orientationd(keys=['fa', 'md'], axcodes="RAS"),
+            CenterSpatialCropd(keys=['fa', 'md'], roi_size=(192, 228, 192)),
+            Spacingd(keys=['fa', 'md'], pixdim=(1.5, 1.5, 1.5), mode=('bilinear', 'bilinear')),
+            ToTensord(keys=['fa', 'md']),
+            ConcatItemsd(keys=['fa', 'md'], name='images')
+        ])
+        data_dict = {'fa': path_fa, 'md': path_md}
+        data_dict = transform(data_dict)
+        img = data_dict['images']
+    
+    elif modality == 'T1w':
+        transform = Compose([
+            LoadImage(reader="NibabelReader", image_only=True),
+            EnsureChannelFirst(),
+            Orientation(axcodes="RAS"),
+            CenterSpatialCrop(roi_size=(192, 228, 192)),
+            Spacing(pixdim=(1.5, 1.5, 1.5), mode='bilinear'),
+            NormalizeIntensity(nonzero=True),
+            ToTensor(),
+        ])
+        img = transform(path_t1)
+    else:
+        raise ValueError(f'Unknown modality: {modality}')
+    
+    img = img.unsqueeze(0)
+        
+    sex_vec = vectorize_label(label_name='sex', label_value=sex)
+    sex_vec = torch.tensor(sex_vec, dtype=torch.float32)
+    race_vec = vectorize_label(label_name='race', label_value=race)
+    race_vec = torch.tensor(race_vec, dtype=torch.float32)
+    label_feature_vec = torch.cat((sex_vec, race_vec), dim=0)
+    label_feature_vec = label_feature_vec.unsqueeze(0)
+    
+    return img, label_feature_vec
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -60,8 +156,11 @@ def main():
     parser.add_argument('-s', '--sex', type=int, required=False, help='(optional, but recommended) integer, 0 for female, 1 for male.')
     parser.add_argument('-r', '--race', type=int, required=False, help='(optional, but recommended) integer, 1 for "White", 2 for "Asian", 3 for "Black or African American", 4 for "American Indian or Alaska Native", and 0 for "Some Other Race".')
     parser.add_argument('-w', '--weights', type=str, required=True, help='path to the directory of model weights pulled from Hugging Face. For example, /home-local/inference/braid-v1.0.')
+    parser.add_argument('-cc', '--check_complete', action='store_true', help='if the flag is given, the code will check the completeness of the model weights repository and verify the MD5 hash of the .pth files.')
     parser.add_argument('-i', '--intermediate', action='store_true', help='if the flag is given, the intermediate processing files will be preserved after the job completion. It is recommended to check the intermediate files, especially the processed images, before analysis.')
     parser.add_argument('-po', '--preprocess_only', action='store_true', help='if the flag is given, it will run everything except for the ResNet part. This is useful when the user want to run the preprocessing in parallel on a CPU-only machine (which may have more cores) first, and then switch to a GPU machine to complete the inference.')
+    parser.add_argument('-co', '--cpu_only', action='store_true', help='if the flag is given, the code will run on CPU only.')
+    parser.add_argument('-g', '--gpu', type=int, required=False, help='(optional) integer, the index of the GPU to use. If not provided (and not in cpu-only mode), the code will use the first available GPU.')
     parser.add_argument('-o', '--outdir', type=str, required=True, help='path to the output directory (write permission required).')
     args = parser.parse_args()
 
@@ -81,7 +180,7 @@ def main():
     if path_t1w_brain.is_file():
         print(f'Skull-stripped T1w image already exists at {path_t1w_brain}')
     else:
-        apply_skull_strip_mask(args.t1w, path_t1w_brain_mask, path_t1w_brain)
+        braid.calculate_dti_scalars.apply_skull_strip_mask(args.t1w, path_t1w_brain_mask, path_t1w_brain)
         print(f'Saved brain image at {path_t1w_brain}')
 
     # step 2: extract single shell and b0
@@ -126,11 +225,11 @@ def main():
     if path_fa_ss.is_file() and path_md_ss.is_file():
         print(f'Skull-stripped FA and MD maps already exist at {path_fa_ss.parent}')
     else:
-        apply_skull_strip_mask(path_fa, path_b0_brain_mask, path_fa_ss)
-        apply_skull_strip_mask(path_md, path_b0_brain_mask, path_md_ss)
+        braid.calculate_dti_scalars.apply_skull_strip_mask(path_fa, path_b0_brain_mask, path_fa_ss)
+        braid.calculate_dti_scalars.apply_skull_strip_mask(path_md, path_b0_brain_mask, path_md_ss)
         print(f'Skull-stripped FA and MD maps saved at {path_fa_ss.parent}')
 
-    # step 6: transform FA and MD maps to MNI152 space
+    # step 6: transform FA and MD maps and T1w image to MNI152 space
     path_fa_ss_mni_affine = outdir / 'fa_skullstrip_MNI152.nii.gz'
     path_md_ss_mni_affine = outdir / 'md_skullstrip_MNI152.nii.gz'
     path_fa_ss_mni_warp = outdir / 'fa_skullstrip_MNI152_warped.nii.gz'
@@ -145,3 +244,108 @@ def main():
         t_warp = [transform_t1_to_template_warp, transform_t1_to_template_affine, transform_b0_to_t1]
         braid.registrations.apply_transform_to_img_in_b0(path_fa_ss, args.mni152, path_fa_ss_mni_warp, t_warp)
         braid.registrations.apply_transform_to_img_in_b0(path_md_ss, args.mni152, path_md_ss_mni_warp, t_warp)
+        print(f'Transformed FA and MD maps saved at {path_fa_ss_mni_affine.parent}')
+    
+    path_t1w_brain_mni_affine = outdir / 't1w_brain_MNI152.nii.gz'
+    if path_t1w_brain_mni_affine.is_file():
+        print(f'Transformed T1w image already exists at {path_t1w_brain_mni_affine}')
+    else:
+        braid.registrations.apply_ants_transformations(path_t1w_brain, args.mni152, path_t1w_brain_mni_affine, list_transforms=[transform_t1_to_template_affine])
+        print(f'Transformed T1w image saved at {path_t1w_brain_mni_affine}')
+    
+    if args.preprocess_only:
+        print('All preprocessing steps are completed.\n')
+        return
+    
+    # step 7: run ResNet models
+    root_weights = Path(args.weights)
+    if args.check_complete:
+        braid.utls.verify_downloaded_model_weights(root_weights)
+    else:
+        print('Skip verifying the model weights repository.')
+    
+    if args.cpu_only:
+        device = torch.device('cpu')
+    elif args.gpu is not None:
+        device = torch.device(f'cuda:{args.gpu}')
+    else:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f'Using device: {device} for model inference.\n')
+    
+    row_data = {'path_dwi': [args.dwi], 'path_t1w': [args.t1w]}
+    for model_type in ['wm-age-nonrigid', 'wm-age-affine', 'gm-age-ours']:
+        
+        path_yaml = root_weights / model_type / 'config.yaml'
+        with open(path_yaml, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        # load sample to device
+        if model_type == 'wm-age-nonrigid':
+            img, label_feature_vec = load_braid_sample(modality='DTI', path_fa=path_fa_ss_mni_warp, path_md=path_md_ss_mni_warp, sex=args.sex, race=args.race)
+        elif model_type == 'wm-age-affine':
+            img, label_feature_vec = load_braid_sample(modality='DTI', path_fa=path_fa_ss_mni_affine, path_md=path_md_ss_mni_affine, sex=args.sex, race=args.race)
+        elif model_type == 'gm-age-ours':
+            img, label_feature_vec = load_braid_sample(modality='T1w', path_t1=path_t1w_brain_mni_affine, sex=args.sex, race=args.race)
+        else:
+            raise ValueError(f'Unknown model type: {model_type}')
+        img, label_feature_vec = img.to(device), label_feature_vec.to(device)
+        
+        for fold in [1,2,3,4,5]:
+            # load model
+            model = braid.evaluations.load_trained_model(
+                model_name = config['model']['name'],
+                mlp_hidden_layer_sizes = config['model']['mlp_hidden_layer_sizes'],
+                feature_vector_length = config['model']['feature_vector_length'],
+                n_input_channels = config['model']['n_input_channels'],
+                path_pth = str(root_weights / model_type / f'{model_type}-fold-{fold}.pth'), 
+                device = device
+                )
+            model.eval()
+            with torch.no_grad():
+                pred = model(img, label_feature_vec).detach().cpu()
+                pred = torch.flatten(pred).tolist()[0]    
+            
+            # bias corrections
+            pred_bc = None
+            if args.age is None:
+                print("Chronological age is not provided. Skip bias correction.")
+            else:
+                with open(str(root_weights / model_type / f'{model_type}-fold-{fold}-bc-params.json'), 'r') as f:
+                    bc_params = json.load(f)
+                pred_bc = pred - (bc_params['slope']*args.age + bc_params['intercept'])
+            
+            row_data[f'{model_type}_fold-{fold}'] = [pred]
+            row_data[f'{model_type}_fold-{fold}_bias-corrected'] = [pred_bc]
+            
+        # Compute mean and std
+        vals = []
+        for fold in [1,2,3,4,5]:
+            val = row_data[f'{model_type}_fold-{fold}'][0]
+            if val:
+                vals.append(val)
+        if len(vals) > 0:
+            row_data[f'{model_type}_mean'] = [np.nanmean(vals)]
+            row_data[f'{model_type}_std'] = [np.nanstd(vals)]
+        else:
+            row_data[f'{model_type}_mean'] = [None]
+            row_data[f'{model_type}_std'] = [None]
+        
+        vals = []
+        for fold in [1,2,3,4,5]:
+            val = row_data[f'{model_type}_fold-{fold}_bias-corrected'][0]
+            if val:
+                vals.append(val)
+        if len(vals) > 0:
+            row_data[f'{model_type}_bias-corrected_mean'] = [np.nanmean(vals)]
+            row_data[f'{model_type}_bias-corrected_std'] = [np.nanstd(vals)]
+        else:
+            row_data[f'{model_type}_bias-corrected_mean'] = [None]
+            row_data[f'{model_type}_bias-corrected_std'] = [None]
+    
+    df = pd.DataFrame(row_data)
+    path_csv = outdir / 'final' / 'braid_predictions.csv'
+    path_csv.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(path_csv, index=False)
+    
+    # TODO: remove intermediate files if not requested
+    
