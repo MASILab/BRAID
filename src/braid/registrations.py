@@ -76,3 +76,20 @@ def apply_transform_to_img_in_b0(path_img_b0, path_img_ref, path_img_out, list_t
         
     subprocess.run(command)
 
+
+def apply_ants_transformations(path_input, path_reference, path_output, list_transforms):
+    """Wrapper function for antsApplyTransforms. Basically the same as apply_transform_to_img_in_b0().
+    """
+    Path(path_output).parent.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        'antsApplyTransforms', '-d', '3',
+        '-i', str(path_input),
+        '-r', str(path_reference), 
+        '-o', str(path_output), 
+        '-n', 'Linear', 
+        ]
+    for transform in list_transforms:
+        cmd += ['-t', str(transform)]
+        
+    subprocess.run(cmd)
+    
