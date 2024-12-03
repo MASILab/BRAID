@@ -1,9 +1,44 @@
+import json
+import hashlib
 import subprocess
 import nibabel as nib
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import numpy as np
 from pathlib import Path
+
+def calculate_md5(file_path):
+    """Calculate the MD5 hash of a file."""
+    md5_hash = hashlib.md5()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            md5_hash.update(chunk)
+    return md5_hash.hexdigest()
+
+
+def verify_downloaded_model_weights(root_weights):
+    """Verify the downloaded model weights by comparing the MD5 hash."""
+    root_weights = Path(root_weights)
+    md5_json = root_weights / 'md5.json'
+    
+    if not md5_json.is_file():
+        raise ValueError(f"md5.json not found in {root_weights}. Provide the path to the repository pulled from Hugging Face.")
+        
+    with open(md5_json, "r") as f:
+        dict_md5 = json.load(f)
+
+    for model_type in dict_md5.keys():
+        for model_fn, md5 in dict_md5[model_type].items():
+            model_path = root_weights / model_type / model_fn
+            if not model_path.is_file():
+                print(f"Model weights not found: {model_path}")
+                continue
+            
+            md5_calculated = calculate_md5(model_path)
+            if md5_calculated != md5:
+                raise ValueError(f"MD5 mismatch for {model_path}! Expected: {md5}, Calculated: {md5_calculated}")
+    print(f"MD5 match for all model weights in {root_weights}!")
+    
 
 def generate_qa_screenshot_fa_md(path_fa, path_md, path_png, offset=0):
     
