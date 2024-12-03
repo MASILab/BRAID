@@ -20,9 +20,8 @@ dependencies = [
     "tqdm==4.66.1",
 ]
 
-[tool.setuptools]
-packages = ["braid"]
-package-dir = {"" = "src"}
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [project.scripts]
 braid_one_sample_inference = "braid.scripts.braid_one_sample_inference:main"
