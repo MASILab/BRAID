@@ -182,8 +182,21 @@ def get_the_sequence_of_scans(
     if mode == 'train':
         print('Generating the sequence of scans (with uniformly distributed ages) for training...')
         list_scans = []
-        df['sample_weight'] = 1 / df.groupby('dataset_subject')['dataset_subject'].transform('count')
+        
         for epoch in tqdm(range(epochs)):
+            # normalize probability by the number of samples per subject
+            df['sample_weight'] = 1 / df.groupby('dataset_subject')['dataset_subject'].transform('count')
+            sample_weight_decay = df['sample_weight'].min()*0.5 - 1e-10
+            # Comment: A larger factor (0.5 by default) leads to stronger decay effect, 
+            # which means we can iterate through all samples probably in fewer steps. 
+            # (I used the word "probably" because the sampling is a random process.)
+            # But it may cause difference in the probability decay speed between 
+            # subjects with more samples and subjects with fewer samples. 
+            # Because of the error-handling if statement in the "probability decay" block below.
+            # (A sample with a low probability may be spared from the subtraction/decay).
+            # And we don't want such difference in the probability decay speed,
+            # because we want to avoid bias towards subjects with more data.
+            
             list_scans_epoch = []
             for _ in range(df.shape[0]):
                 while True:
@@ -195,8 +208,17 @@ def get_the_sequence_of_scans(
                         break
                 row = samples.sample(n=1, weights='sample_weight').iloc[0]
                 
+                # # probability decay (archived implementation)
+                # # comment: subject with fewer scans will decay faster, which is not intended
+                # df.loc[df['scan_id']==row['scan_id'], 'sample_weight'] *= decay_factor
+                
                 # probability decay
-                df.loc[df['scan_id']==row['scan_id'], 'sample_weight'] *= decay_factor
+                cur_sample_weight = df.loc[df['scan_id']==row['scan_id'], 'sample_weight']
+                updated_sample_weight = cur_sample_weight - sample_weight_decay
+                if updated_sample_weight > 0:
+                    df.loc[df['scan_id']==row['scan_id'], 'sample_weight'] = updated_sample_weight
+                
+                # re-normalize the probabilities within the age bin
                 df.loc[age_range_mask, 'sample_weight'] = df.loc[age_range_mask, 'sample_weight'] / df.loc[age_range_mask, 'sample_weight'].sum()
 
                 list_scans_epoch.append(row['scan_id'])
