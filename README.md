@@ -82,7 +82,39 @@ source env/bin/activate
 ```
 
 #### 1.3 Install dependencies
+
 ```bash
 pip install ./
 ```
 
+**Other dependencies (for preprocessing):**
+
+| Package                                          | Tested version |
+|--------------------------------------------------|----------------|
+| [FSL](https://fsl.fmrib.ox.ac.uk/fsl/fslwiki/FSL)| 6.0.4          |
+| [MRtrix](https://www.mrtrix.org/)                | 3.0.3          |
+| [c3d](https://sourceforge.net/projects/c3d/files/c3d/1.0.0/) | 1.0.0  |
+| [ANTs](https://stnava.github.io/ANTs/)           | 2.3.1.dev48-g39ce5 |
+
+#### 1.4 Download model weights from Hugging Face
+
+> Link: [braid-v1.0 weights](https://huggingface.co/chenyugoal/braid-v1.0/tree/main)
+
+```bash
+# if git-lfs is not installed yet
+git lfs install
+# clone the repository to the current directory
+git clone https://huggingface.co/chenyugoal/braid-v1.0
+```
+
+### 2. Model inference with one line of command
+
+```bash
+braid_one_sample_inference -d {path to dwi} -v {path to bval} -c {path to bvec} -t {path to t1 image} -tm {path to t1 brain segmentation or brain mask} -m ./data/template/MNI_152.nii.gz -w {path to the braid-v1.0 directory} -i -o {path to the output directory}
+```
+
+See descriptions about the arguments by running `braid_one_sample_inference -h`.
+
+## FAQ
+- **Q: I saw "WM age nonlinear" in some scripts. What is it?**
+- A: The name "WM age nonlinear" appears most likely in the legacy scripts created during model development. We had a debate whether we should use "WM age nonlinear" or "WM age nonrigid" when referring to the brain age estimation made based on the "warped" images. At the time point of writing the journal paper, we leaned more  towards "WM age nonrigid" and continued using it afterwards.
