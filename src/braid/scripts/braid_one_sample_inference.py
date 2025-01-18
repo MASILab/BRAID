@@ -1,8 +1,10 @@
 # Date: Nov 26, 2024
 
+import os
 import yaml
 import json
 import torch
+import shutil
 import argparse
 import numpy as np
 import pandas as pd
@@ -346,6 +348,15 @@ def main():
     path_csv = outdir / 'final' / 'braid_predictions.csv'
     path_csv.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(path_csv, index=False)
+    print(f'Brain age estimates saved at {path_csv}')
     
-    # TODO: remove intermediate files if not requested
-    
+    # step 8: remove all intermediate files, if not specified to preserve
+    if not args.intermediate:
+        for fn in outdir.iterdir():
+            if fn.name == 'final':
+                continue
+            if fn.is_dir():
+                shutil.rmtree(fn)
+            else:
+                os.remove(fn)
+        print('Intermediate files removed.')
