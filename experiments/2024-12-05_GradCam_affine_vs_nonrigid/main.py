@@ -47,9 +47,8 @@ if __name__ == '__main__':
     root_weights = Path('/home-local/gaoc11/braid_go_public/braid-v1.0')
     df = pd.read_csv('/tmp/.GoneAfterReboot/braid_test.csv')
 
-    for sex_label in df['sex']:
-        for race_label in df['race_simple']:
-
+    for sex_label in df['sex'].unique():
+        for race_label in df['race_simple'].unique():
             subset = df.loc[(df['sex']==sex_label) & (df['race_simple']==race_label), ]
             print(f"sex: {sex_label}\trace: {race_label}\t #samples: {len(subset.index)}")
 
@@ -64,8 +63,8 @@ if __name__ == '__main__':
                         mlp_hidden_layer_sizes = config['model']['mlp_hidden_layer_sizes'],
                         feature_vector_length = config['model']['feature_vector_length'],
                         n_input_channels = config['model']['n_input_channels'],
-                        sex = lut_sex[sex_label],
-                        race = lut_race[race_label],
+                        sex = lut_sex.get(sex_label),
+                        race = lut_race.get(race_label),
                         path_pth = str(root_weights / model_type / f'{model_type}-fold-{fold}.pth'), 
                         device = device,
                     )
