@@ -57,7 +57,7 @@ if __name__ == '__main__':
                 with open(path_yaml, 'r') as f:
                     config = yaml.safe_load(f)
                 
-                for fold in [1,2]:
+                for fold in [1]:
                     model = load_trained_model(
                         model_name = config['model']['name'],
                         mlp_hidden_layer_sizes = config['model']['mlp_hidden_layer_sizes'],
@@ -70,22 +70,27 @@ if __name__ == '__main__':
                     )
                     model.eval()
 
-                    target_layers = [model.layer4[-1]]
-                    cam = GradCAM(model=model, target_layers=target_layers)
-                    targets = [BinaryClassifierOutputTarget(1)]
+                    layers = [model.layer1[-1], model.layer2[-1], model.layer3[-1], model.layer4[-1]]
+                    for layer_idx, layer in enumerate(layers):
+                        target_layers = [layer]
+                        cam = GradCAM(model=model, target_layers=target_layers)
+                        targets = [BinaryClassifierOutputTarget(1)]
 
-                    for _, row in tqdm(subset.iterrows(), total=len(subset.index), desc=f"{model_type} fold-{fold}"):
-                        path_fa = root_data / dict_model[model_type]['dataset_rel_path'] / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / f"fa{dict_model[model_type]['suffix']}"
-                        path_md = root_data / dict_model[model_type]['dataset_rel_path'] / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / f"md{dict_model[model_type]['suffix']}"
-                        img = load_images(path_fa, path_md)
-                        img = img.to(device)
+                        for _, row in tqdm(subset.iterrows(), total=len(subset.index), desc=f"{model_type} fold-{fold} layer{layer_idx+1}"):
+                            path_fa = root_data / dict_model[model_type]['dataset_rel_path'] / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / f"fa{dict_model[model_type]['suffix']}"
+                            path_md = root_data / dict_model[model_type]['dataset_rel_path'] / row['dataset'] / row['subject'] / row['session'] / f"scan-{row['scan']}" / f"md{dict_model[model_type]['suffix']}"
+                            path_save = path_fa.parent / f"gradcam_fold-{fold}_layer{layer_idx+1}.nii.gz"
+                            if path_save.exists():
+                                continue
 
-                        grayscale_cam = cam(input_tensor=img, targets=targets)
-                        grayscale_cam = grayscale_cam[0,:].astype(np.float16)
+                            img = load_images(path_fa, path_md)
+                            img = img.to(device)
 
-                        # save to nifti
-                        img_ref = nib.load(path_fa)
-                        img_save = nib.Nifti1Image(grayscale_cam, affine=img_ref.affine, header=img_ref.header)
-                        path_save = path_fa.parent / f"gradcam_fold-{fold}.nii.gz"
-                        nib.save(img_save, path_save)
-                        
+                            grayscale_cam = cam(input_tensor=img, targets=targets)
+                            grayscale_cam = grayscale_cam[0,:].astype(np.float16)
+
+                            # save to nifti
+                            img_ref = nib.load(path_fa)
+                            img_save = nib.Nifti1Image(grayscale_cam, affine=img_ref.affine, header=img_ref.header)
+                            nib.save(img_save, path_save)
+    print("GradCAM computed for each testing sample.")
