@@ -243,7 +243,7 @@ def get_matched_cohort(df, cnstar_threshold=(0,10), age_diff_threshold=1):
     return df_matched
 
 
-def visualize_matched_data(df_matched, png):
+def visualize_matched_data(df_matched, pdf):
     # hyperparameters for plotting
     xlim = [57, 96]
     xticks = [60,70,80,90]
@@ -401,7 +401,7 @@ def visualize_matched_data(df_matched, png):
     ax.tick_params(axis='y', which='both', direction='out', length=4)
     
     # Save figure
-    fig.savefig(png, dpi=600)
+    fig.savefig(pdf)
 
 if __name__ == '__main__':
     # Load data
@@ -421,4 +421,4 @@ if __name__ == '__main__':
     for t in cnstar_threshold_choices:
         df_matched = get_matched_cohort(df, cnstar_threshold=t, age_diff_threshold=1)
         df_matched.to_csv(f'experiments/2024-05-07_Matched_Cohort_Linear_Model/data/df_matched_cnstar-{t[0]}-{t[1]}.csv', index=False)
-        visualize_matched_data(df_matched, png=f'experiments/2024-05-07_Matched_Cohort_Linear_Model/figs/blant_altman_matched_cohort_cnstar-{t[0]}-{t[1]}_v1.png')
+        visualize_matched_data(df_matched, pdf=f'experiments/2024-05-07_Matched_Cohort_Linear_Model/figs/blant_altman_matched_cohort_cnstar-{t[0]}-{t[1]}_v1.pdf')
