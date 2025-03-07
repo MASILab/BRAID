@@ -55,8 +55,8 @@ fontsize = 9
 fontsize_legend = 8
 fontfamily = 'DejaVu Sans'
 linewidth = 1
-ylim = [0.35, 0.85]
-y_ticks = [0.4, 0.5, 0.6, 0.7, 0.8]
+ylim = [0.25, 0.85]
+y_ticks = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
 clf_names = ['Logistic Regression','Linear SVM','Random Forest']
 dict_feat_combos = {
     'basic: chronological age + sex': {'color': (0,0,0), 'alpha': 1, 'linestyle': 'solid'},
