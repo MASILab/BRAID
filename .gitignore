@@ -1,3 +1,5 @@
+singularity/example_data
+
 reports/figures/2025-01-21_MCI_Prediction_From_T_Minus_N_Years_Two_Methods_Parts/figs
 experiments/2024-12-05_GradCam_affine_vs_nonrigid/data
 experiments/2024-12-01_Zald_Model_Inference/*.csv

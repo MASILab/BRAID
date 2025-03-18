@@ -27,27 +27,35 @@ def create_job_tuples(example_data_root):
 def run_braid_in_two_ways(job_tuple):
     dwi, bval, bvec, t1, t1_seg, age, sex, race, dir = job_tuple
     
-    # run braid with python source code
-    outdir = Path(dir) / 'braid_output_python'
+    # # run braid with python source code
+    # outdir = Path(dir) / 'braid_output_python'
+    # outdir.mkdir(parents=True, exist_ok=True)
+    # log = outdir / 'log.txt'
+    # cmd = [
+    #     'braid_one_sample_inference', 
+    #     '-d', dwi, '-v', bval, '-c', bvec, 
+    #     '-t', t1, '-tm', t1_seg,
+    #     '-m', 'data/template/MNI_152.nii.gz',
+    #     '-a', str(age), '-s', str(sex), '-r', str(race),
+    #     '-w', '/home-local/gaoc11/braid_go_public/braid-v1.0', 
+    #     '-i', 
+    #     '-o', outdir
+    # ]
+    # with open(log, 'w') as f:
+    #     subprocess.run(cmd, stdout=f, stderr=f)
+    
+    # run braid with singularity
+    outdir = Path(dir) / 'braid_output_singularity'
     outdir.mkdir(parents=True, exist_ok=True)
     log = outdir / 'log.txt'
     cmd = [
-        'braid_one_sample_inference', 
-        '-d', dwi, '-v', bval, '-c', bvec, 
-        '-t', t1, '-tm', t1_seg,
-        '-m', 'data/template/MNI_152.nii.gz',
-        '-a', str(age), '-s', str(sex), '-r', str(race),
-        '-w', '/home-local/gaoc11/braid_go_public/braid-v1.0', 
-        '-i', 
-        '-o', outdir
+        'singularity', 'run', 
+        '-B', f"{dir}:/INPUTS",
+        '-B', f"{outdir}:/OUTPUTS",
+        '/home-local/gaoc11/braid_go_public/braid_v1.0.0.sif',
     ]
     with open(log, 'w') as f:
         subprocess.run(cmd, stdout=f, stderr=f)
-    
-    # # TODO: run braid with singularity
-    # outdir = Path(dir) / 'braid_output_singularity'
-    # outdir.mkdir(parents=True, exist_ok=True)
-    # log = outdir / 'log.txt'
 
 
 if __name__ == "__main__":
