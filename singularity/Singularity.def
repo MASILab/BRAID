@@ -1,0 +1,114 @@
+Bootstrap: docker
+From: ubuntu:18.04
+
+%files
+    /home-local/gaoc11/braid_go_public/braid-v1.0 /FILES/
+    data/template/MNI_152.nii.gz /FILES/MNI_152.nii.gz
+
+
+%help
+    https://github.com/MASILab/BRAID
+
+
+%post -c /bin/bash
+    cd /
+    mkdir -p APPS
+    mkdir -p INSTALLERS
+
+    apt-get -y update
+
+    # MRTrix3
+    apt-get -y install git g++ python python-numpy libeigen3-dev zlib1g-dev libqt4-opengl-dev libgl1-mesa-dev libfftw3-dev libtiff5-dev python3-distutils
+    cd APPS
+    git clone https://github.com/MRtrix3/mrtrix3.git
+    cd mrtrix3
+    git checkout 3.0.3
+    ./configure
+    ./build
+    cd /
+
+    # FSL
+    apt-get -y install python wget ca-certificates libglu1-mesa libgl1-mesa-glx libsm6 libice6 libxt6 libpng16-16 libxrender1 libxcursor1 libxinerama1 libfreetype6 libxft2 libxrandr2 libgtk2.0-0 libpulse0 libasound2 libcaca0 libopenblas-base bzip2 dc bc 
+    wget -O /INSTALLERS/fslinstaller.py "https://fsl.fmrib.ox.ac.uk/fsldownloads/fslconda/releases/fslinstaller.py"
+    cd /INSTALLERS
+    python fslinstaller.py -d /APPS/fsl -V 6.0.6
+    cd /
+
+    # Convert3D (stable build 1.0.0)
+    apt-get -y install wget tar
+    wget -O /INSTALLERS/c3d-1.0.0-Linux-x86_64.tar.gz "https://downloads.sourceforge.net/project/c3d/c3d/1.0.0/c3d-1.0.0-Linux-x86_64.tar.gz?r=https%3A%2F%2Fsourceforge.net%2Fprojects%2Fc3d%2Ffiles%2Fc3d%2F1.0.0%2Fc3d-1.0.0-Linux-x86_64.tar.gz%2Fdownload&ts=1571934949"
+    tar -xf /INSTALLERS/c3d-1.0.0-Linux-x86_64.tar.gz -C /APPS/
+    cd /
+
+    # CMake (compatible version for ANTs)
+    apt-get -y install build-essential libssl-dev
+    cd /INSTALLERS
+    mkdir cmake_install
+    cd cmake_install
+    wget https://github.com/Kitware/CMake/releases/download/v3.23.0-rc2/cmake-3.23.0-rc2.tar.gz
+    tar -xf cmake-3.23.0-rc2.tar.gz
+    cd cmake-3.23.0-rc2/
+    ./bootstrap
+    make
+    make install
+    cd /
+
+    # ANTS
+    cd /INSTALLERS
+    mkdir ants_installer
+    cd ants_installer
+    git clone https://github.com/ANTsX/ANTs.git
+    mkdir -p /APPS/ants
+    mkdir ants_build
+    cd ants_build
+    cmake \
+        -DCMAKE_INSTALL_PREFIX=/APPS/ants \
+        -DBUILD_TESTING=OFF \
+        -DRUN_LONG_TESTS=OFF \
+        -DRUN_SHORT_TESTS=OFF \
+        ../ANTs 2>&1 | tee cmake.log
+    make 2>&1 | tee build.log
+    cd ANTS-build
+    make install 2>&1 | tee install.log
+    cd /
+
+    # I/O folders
+    mkdir -p /INPUTS
+    mkdir -p /OUTPUTS
+    mkdir -p /CODE
+
+    chmod 755 /INPUTS
+    chmod 755 /APPS
+    chmod 775 /OUTPUTS
+    chmod 755 /CODE
+    
+    # Install source code
+    cd /CODE
+    git clone https://github.com/MASILab/BRAID.git
+    cd BRAID
+    python -m venv env
+    source env/bin/activate
+    pip install .
+    deactivate
+
+    # clean up
+    rm -r /INSTALLERS
+
+
+%environment
+    export PATH="/APPS/mrtrix3/bin:$PATH"
+    
+    FSLDIR=/APPS/fsl
+    . ${FSLDIR}/etc/fslconf/fsl.sh
+    PATH=${FSLDIR}/bin:${PATH}
+    export FSLDIR PATH
+
+    export PATH="/APPS/c3d-1.0.0-Linux-x86_64/bin:$PATH"
+
+    export ANTSPATH=/APPS/ants/bin/
+    export PATH=${ANTSPATH}:$PATH
+
+
+%runscript
+    source /CODE/BRAID/env/bin/activate
+    braid_io_dir_wrapper
