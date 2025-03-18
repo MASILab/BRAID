@@ -29,3 +29,4 @@ where = ["src"]
 
 [project.scripts]
 braid_one_sample_inference = "braid.scripts.braid_one_sample_inference:main"
+braid_io_dir_wrapper = "braid.scripts.braid_io_dir_wrapper:main"
