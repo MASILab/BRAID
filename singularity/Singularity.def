@@ -27,7 +27,8 @@ From: ubuntu:18.04
     # Python 3.12.8
     apt-get -y install wget tar build-essential zlib1g-dev \
         libncurses5-dev libgdbm-dev libnss3-dev libssl-dev \
-        libreadline-dev libffi-dev
+        libreadline-dev libffi-dev libbz2-dev libsqlite3-dev \
+        liblzma-dev
     cd /INSTALLERS
     wget https://www.python.org/ftp/python/3.12.8/Python-3.12.8.tgz
     tar -xzvf Python-3.12.8.tgz
@@ -100,6 +101,5 @@ From: ubuntu:18.04
     export PATH=${ANTSPATH}:$PATH
 
 
-%runscript -c /bin/bash
-    source /CODE/BRAID/env/bin/activate
-    braid_io_dir_wrapper
+%runscript
+    bash /CODE/BRAID/singularity/runscript.sh
