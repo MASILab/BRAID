@@ -1,5 +1,3 @@
-# Date: Nov 26, 2024
-
 import os
 import yaml
 import json
@@ -9,6 +7,8 @@ import argparse
 import numpy as np
 import pandas as pd
 import nibabel as nib
+import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 import braid.calculate_dti_scalars
 import braid.utls
 import braid.evaluations
@@ -130,6 +130,92 @@ def load_braid_sample(modality, path_fa=None, path_md=None, path_t1=None, sex=No
     label_feature_vec = label_feature_vec.unsqueeze(0)
     
     return img, label_feature_vec
+
+
+def generate_qa_png(mni152, fa_warp, md_warp, fa_affine, md_affine, t1w_affine, csv, png):
+    df = pd.read_csv(csv)
+    brain_ages = ['wm-age-nonrigid', 'wm-age-affine', 'gm-age-ours']
+    brain_ages_rename = ['WM age (nonrigid)', 'WM age (affine)', 'GM age (affine/ours)']
+    path_imgs = [[fa_warp, md_warp], [fa_affine, md_affine], [t1w_affine]]
+    ranges = [[(0, 1), (0, 0.003)], [(0, 1), (0, 0.003)], [(None, None)]]
+    offsets = [-20, -10, 0]
+    
+    fontsize = 8
+    fig = plt.figure(figsize=(6, 4))
+    gs = gridspec.GridSpec(nrows=6, ncols=6, hspace=0, wspace=0.02, height_ratios=[1,1,1,6,6,6])
+    
+    # Text
+    txt = ['Brain age:', 'uncorrected', 'bias-corrected']
+    for i, t in enumerate(txt):
+        ax = fig.add_subplot(gs[i,0])
+        ax.text(0.5, 0.5, t, ha='center', va='center', fontsize=fontsize)
+        ax.axis('off')
+    
+    # MNI152
+    img = nib.load(mni152)
+    data = img.get_fdata()
+    resolution = data.shape[:3]
+    aspect = img.header.get_zooms()[1] / img.header.get_zooms()[0]
+    for i, offset in enumerate(offsets):
+        ax = fig.add_subplot(gs[3+i, 0])
+        ax.imshow(
+            data[:,:,int(resolution[2]/2)+offset].T,
+            cmap='gray',
+            origin='lower',
+            aspect=aspect,
+            interpolation='nearest'
+            )
+        ax.axis('off')
+    
+    # Input images
+    for i, brain_age in enumerate(brain_ages):
+        paths = path_imgs[i]
+        
+        # sub-title
+        ax = fig.add_subplot(gs[0, i*2+1:i*2+1+len(paths)])
+        ax.text(0.5, 0.5, brain_ages_rename[i], ha='center', va='center', fontsize=fontsize)
+        ax.axis('off')
+        
+        # uncorrected value
+        mean = df[f'{brain_age}_mean'].values[0]
+        std = df[f'{brain_age}_std'].values[0]
+        txt = f'{mean:.1f} ± {std:.1f}' if not np.isnan(mean) else 'N/A'
+        ax = fig.add_subplot(gs[1, i*2+1:i*2+1+len(paths)])
+        ax.text(0.5, 0.5, txt, ha='center', va='center', fontsize=fontsize)
+        ax.axis('off')
+        
+        # bias-corrected value
+        mean = df[f'{brain_age}_bias-corrected_mean'].values[0]
+        std = df[f'{brain_age}_bias-corrected_std'].values[0]
+        txt = f'{mean:.1f} ± {std:.1f}' if not np.isnan(mean) else 'N/A'
+        ax = fig.add_subplot(gs[2, i*2+1:i*2+1+len(paths)])
+        ax.text(0.5, 0.5, txt, ha='center', va='center', fontsize=fontsize)
+        ax.axis('off')
+        
+        # images
+        for j, path_img in enumerate(paths):
+            idx_col = i*2 + 1 + j
+            
+            img = nib.load(path_img)
+            data = img.get_fdata()
+            resolution = data.shape[:3]
+            aspect = img.header.get_zooms()[1] / img.header.get_zooms()[0]
+            
+            for k, offset in enumerate(offsets):
+                idx_row = 3 + k
+                ax = fig.add_subplot(gs[idx_row, idx_col])
+                ax.imshow(
+                    data[:, :, int(resolution[2]/2)+offset].T,
+                    cmap='gray',
+                    origin='lower',
+                    aspect=aspect,
+                    interpolation='nearest',
+                    vmin=ranges[i][j][0],
+                    vmax=ranges[i][j][1],
+                )
+                ax.axis('off')
+        
+    fig.savefig(png, dpi=300, bbox_inches='tight')
 
 
 def main():
@@ -350,7 +436,20 @@ def main():
     df.to_csv(path_csv, index=False)
     print(f'Brain age estimates saved at {path_csv}')
     
-    # step 8: remove all intermediate files, if not specified to preserve
+    # step 8: generate QA png
+    png = outdir / 'final' / 'QA.png'
+    generate_qa_png(
+        mni152=args.mni152, 
+        fa_warp=path_fa_ss_mni_warp, 
+        md_warp=path_md_ss_mni_warp, 
+        fa_affine=path_fa_ss_mni_affine, 
+        md_affine=path_md_ss_mni_affine, 
+        t1w_affine=path_t1w_brain_mni_affine, 
+        csv=path_csv, 
+        png=png,
+        )
+    
+    # step 9: remove all intermediate files, if not specified to preserve
     if not args.intermediate:
         for fn in outdir.iterdir():
             if fn.name == 'final':
