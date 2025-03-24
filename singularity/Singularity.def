@@ -85,6 +85,7 @@ From: ubuntu:18.04
 
     # clean up
     rm -r /INSTALLERS
+    rm -rf /FILES/braid-v1.0/.git
 
 
 %environment
