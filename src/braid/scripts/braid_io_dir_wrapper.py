@@ -62,9 +62,9 @@ def main():
 
     with open(input_dir / 'demog.json') as f:
         demog = json.load(f)
-        age = demog['age']
-        sex = demog['sex']
-        race = demog['race']
+        age = demog.get('age', None)
+        sex = demog.get('sex', None)
+        race = demog.get('race', None)
     
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -74,11 +74,18 @@ def main():
         '-d', dwi, '-v', bval, '-c', bvec, 
         '-t', t1, '-tm', t1_seg,
         '-m', args.mni152,
-        '-a', str(age), '-s', str(sex), '-r', str(race),
         '-w', args.weights,
         '-i', 
         '-o', output_dir
     ]
+
+    if age is not None:
+        cmd.extend(['-a', str(age)])
+    if sex is not None:
+        cmd.extend(['-s', str(sex)])
+    if race is not None:
+        cmd.extend(['-r', str(race)])
+
     with open(log, 'w') as f:
         subprocess.run(cmd, stdout=f, stderr=f)
     
