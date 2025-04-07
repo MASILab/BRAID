@@ -2,6 +2,7 @@ experiments/2025-03-20_ADSP/converted
 experiments/2025-03-20_ADSP/raw
 singularity/braid_v1.0.0.sif
 singularity/example_data
+singularity/example_data_share
 
 reports/figures/2025-01-21_MCI_Prediction_From_T_Minus_N_Years_Two_Methods_Parts/figs
 experiments/2024-12-05_GradCam_affine_vs_nonrigid/data
