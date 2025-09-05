@@ -32,7 +32,7 @@ Illustration of the preprocessing, which minimizes anatomical information throug
 
 ## Citations
 If you use BRAID in your research, please cite the following papers:
-- Gao et al. "Brain age identification from diffusion MRI synergistically predicts neurodegenerative disease." *Imaging Neuroscience* (2025) [[arXiv preprint](https://arxiv.org/abs/2410.22454)]
+- Gao et al. "Brain age identification from diffusion MRI synergistically predicts neurodegenerative disease." *Imaging Neuroscience* (2025) [https://doi.org/10.1162/imag_a_00552](https://doi.org/10.1162/imag_a_00552)
 - Gao et al. "Predicting age from white matter diffusivity with residual learning." *Medical Imaging 2024: Image Processing.* (2024) [https://doi.org/10.1117/12.3006525](https://doi.org/10.1117/12.3006525)
 
 
