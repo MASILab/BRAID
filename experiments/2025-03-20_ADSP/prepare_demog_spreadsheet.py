@@ -28,6 +28,7 @@ lut_race = {
     'Other': 0,
     'Other, Unknown, or More than one race': 0,
     'Unknown': 0,
+    'Other/unknown/multiple': 0,
 }
 
 
