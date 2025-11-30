@@ -1,4 +1,5 @@
 import os
+import gc
 import pdb
 import torch
 import argparse
@@ -20,6 +21,7 @@ from monai.transforms import (
     Spacingd,
     ResizeWithPadOrCropd,
 )
+from monai.data import NibabelReader
 torch.set_flush_denormal(True)
 os.environ["MALLOC_TRIM_THRESHOLD_"] = "65536" # to address monotonic increase in memory usage
 device = torch.device('cuda')
@@ -91,6 +93,12 @@ def get_model(args):
         n_input_channels=n_input_channels,
     )
     model = model.to(device)
+
+    if args.stage == 'train' and args.resume_pth != '':
+        assert os.path.exists(args.resume_pth), "Resume model weights path does not exist."
+        checkpoint = torch.load(args.resume_pth, map_location=device)
+        model.load_state_dict(checkpoint)
+        print(f"Resumed model weights from {args.resume_pth}")
     
     # load weights if testing
     if args.stage == 'test':
@@ -102,10 +110,22 @@ def get_model(args):
 
 class T1wAgeDataset(Dataset):
     def __init__(self, path_csv, tabular=True):
-        self.df = pd.read_csv(path_csv)
+        df = pd.read_csv(path_csv)
         self.tabular = tabular
+
+        self.t1w_paths = df['t1w_path'].values.astype(str)
+        self.mask_paths = df['mask_path'].values.astype(str)
+
+        if self.tabular:
+            self.sex = df['sex'].fillna('').values.astype(str)
+        else:
+            self.sex = None
+
+        self.age = df['age'].values.astype(np.float32)
+        del df
+
         self.transforms = Compose([
-            LoadImaged(keys=["t1w", "mask"], image_only=True),
+            LoadImaged(keys=["t1w", "mask"], image_only=True, reader=NibabelReader),
             EnsureChannelFirstd(keys=["t1w", "mask"]),
             Orientationd(keys=["t1w", "mask"], axcodes="RAS"),
             MaskIntensityd(keys=["t1w"], mask_key="mask"),
@@ -116,7 +136,7 @@ class T1wAgeDataset(Dataset):
         ])
 
     def __len__(self):
-        return len(self.df.index)
+        return len(self.t1w_paths)
     
     def sex2vector(self, sex):
         if sex == 'male':
@@ -130,14 +150,22 @@ class T1wAgeDataset(Dataset):
     
     def __getitem__(self, idx):
         sample = {
-            "t1w": self.df.iloc[idx]['t1w_path'],
-            "mask": self.df.iloc[idx]['mask_path']
+            "t1w": self.t1w_paths[idx],
+            "mask": self.mask_paths[idx]
         }
         sample = self.transforms(sample)
-        img = sample["t1w"]
+        img_meta = sample["t1w"]
+        if hasattr(img_meta, 'as_tensor'):
+            img = img_meta.as_tensor().clone()
+        elif isinstance(img_meta, torch.Tensor):
+            img = img_meta.clone()
+        else:
+            img = torch.tensor(img_meta).clone()
+        del sample, img_meta
     
-        label_feature = self.sex2vector(self.df.iloc[idx]['sex']) if self.tabular else None
-        age = torch.tensor(self.df.iloc[idx]['age'], dtype=torch.float32)
+        label_feature = self.sex2vector(self.sex[idx]) if self.tabular else None
+        age = torch.tensor(self.age[idx], dtype=torch.float32)
+
         return img, label_feature, age    
 
 def train_model(model, dl_train, dl_val, epochs, args):
@@ -156,7 +184,6 @@ def train_model(model, dl_train, dl_val, epochs, args):
     tb_dir = os.path.join(args.output_dir, "tensorboard")
     os.makedirs(tb_dir, exist_ok=True)
     writer = SummaryWriter(log_dir=tb_dir)
-    best_val_loss = float('inf')
 
     weights_dir = os.path.join(args.output_dir, "weights")
     os.makedirs(weights_dir, exist_ok=True)
@@ -184,6 +211,9 @@ def train_model(model, dl_train, dl_val, epochs, args):
         epoch_loss /= len(dl_train)
         writer.add_scalar('Train/Loss', epoch_loss, epoch)
 
+        torch.cuda.empty_cache()
+        gc.collect()
+
         model.eval()
         val_loss = 0.0
         with torch.no_grad():
@@ -196,10 +226,8 @@ def train_model(model, dl_train, dl_val, epochs, args):
         writer.add_scalar('Val/Loss', val_loss, epoch)
         print(f"Epoch {epoch}: Train Loss: {epoch_loss}\tValidation Loss: {val_loss}")
 
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            path_pth = os.path.join(weights_dir, f"epoch-{epoch}_val-loss-{best_val_loss:.4f}.pth")
-            torch.save(model.state_dict(), path_pth)
+        path_pth = os.path.join(weights_dir, f"epoch-{epoch}.pth")
+        torch.save(model.state_dict(), path_pth)
 
     writer.close()
 
@@ -229,6 +257,11 @@ def test_model(model, dl_test, path_csv, args):
     df['age_pred'] = pred_all
     assert np.isclose(df['age'].values, df['age_gt'].values).all(), "Ground truth ages do not match!"
     df.to_csv(output_csv, index=False)
+    
+    ae = np.abs(df['age_gt'] - df['age_pred']).values
+    mae = np.mean(ae)
+    std_ae = np.std(ae)
+    print(f"Test MAE: {mae:.4f}, STD of AE: {std_ae:.4f}")
 
 
 def main(args):
@@ -246,23 +279,23 @@ def main(args):
             ds_train,
             batch_size=4,
             shuffle=True,
-            num_workers=8,
-            pin_memory=True,
+            num_workers=4,
+            pin_memory=False,
             prefetch_factor=2,
         )
         dl_val = DataLoader(
             ds_val,
             batch_size=4,
             shuffle=False,
-            num_workers=8,
-            pin_memory=True,
+            num_workers=4,
+            pin_memory=False,
             prefetch_factor=2,
         )
         train_model(
             model=model, 
             dl_train=dl_train, 
             dl_val=dl_val, 
-            epochs=40, 
+            epochs=args.n_epochs, 
             args=args
         )
     elif args.stage == 'test':
@@ -271,8 +304,8 @@ def main(args):
             ds_test,
             batch_size=4,
             shuffle=False,
-            num_workers=8,
-            pin_memory=True,
+            num_workers=4,
+            pin_memory=False,
             prefetch_factor=2,
         )
         test_model(model, dl_test, local_dataset_csv['test'], args)
@@ -289,6 +322,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--stage", type=str, default="train", choices=["train", "test"],
         help="Stage: train or test."
+    )
+    parser.add_argument(
+        "--n_epochs", type=int, default=40,
+        help="Number of training epochs."
+    )
+    parser.add_argument(
+        "--resume_pth", type=str, default="",
+        help="Path to model weights (.pth) to resume training from."
     )
     parser.add_argument(
         "--test_model_pth", type=str, default="",
