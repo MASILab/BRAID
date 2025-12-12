@@ -106,15 +106,21 @@ def main():
     outdir.mkdir(parents=True, exist_ok=True)
     output_csv = outdir / input_csv.name.replace('.csv', '_converted.csv')
     
-    df = pd.read_csv(input_csv)
+    df = pd.read_csv(input_csv, sep=None, engine='python')
+    df.columns = df.columns.str.lower()
     for col in ['subject','age','sex','race']:
         assert col in df.columns, f"Column {col} not found in {input_csv}"
     if not args.cross_sectional:
         assert 'session' in df.columns, f"Column session not found in {input_csv}"
 
-    for label in df['sex'].unique():
-        if label not in lut_sex and not pd.isna(label):
-            raise NotImplementedError(f"Sex label not considered: {label}")
+    if 2 in df['sex'].unique() and 1 in df['sex'].unique():
+        print("Assuming 1 for male and 2 for female.")
+        df['sex'] = df['sex'].replace({2:0})
+    else:
+        for label in df['sex'].unique():
+            if label not in lut_sex and not pd.isna(label):
+                raise NotImplementedError(f"Sex label not considered: {label}")
+
     for label in df['race'].unique():
         if label not in lut_race and not pd.isna(label):
             raise NotImplementedError(f"Race label not considered: {label}")

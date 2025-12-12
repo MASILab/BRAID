@@ -12,6 +12,7 @@ delivery_datasets = [
     "ROSMAPMARS",
     "WASHU",
     "WRAP",
+    "WRAPnew",
     "HABSHD",
     "SCAN",
     "FloridaADRC",
@@ -99,5 +100,5 @@ def make_braid_spreadsheet(outdir):
 
 if __name__ == "__main__":
     make_braid_spreadsheet(
-        outdir='/nfs/masi/gaoc11/projects/BRAID/experiments/2025-03-20_ADSP/delivery_2025-09-30'
+        outdir='/nfs/masi/gaoc11/projects/BRAID/experiments/2025-03-20_ADSP/delivery_2025-12-12'
         )
